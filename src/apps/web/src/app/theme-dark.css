@@ -1,0 +1,33 @@
+/* =============== Dark Theme =============== */
+:root.dark {
+    --color-bg: #0a0b0e;
+    --color-surface: #13151a;
+    --color-surface-hover: rgba(255, 255, 255, 0.05);
+    --color-sidebar: #0f1115;
+    --color-border: #2a2e37;
+    --color-border-light: #373b47;
+    --color-text: #e2e8f0;
+    --color-text-secondary: #94a3b8;
+    --color-text-muted: #64748b;
+    --color-primary: #d4b067;
+    --color-primary-hover: #bfa05a;
+    --color-primary-glow: rgba(212, 176, 103, 0.15);
+    --color-gradient-gold: linear-gradient(135deg, #d4b067 0%, #bfa05a 100%);
+    --color-success: #10b981;
+    --color-warning: #f59e0b;
+    --color-danger: #ef4444;
+    --color-info: #60a5fa;
+    --color-modal-backdrop: rgba(0, 0, 0, 0.6);
+
+    /* Graph/Chart colors - dark mode */
+    --chart-bar-start: #d4b067;
+    --chart-bar-end: rgba(212, 176, 103, 0.3);
+    --chart-bar-hover: rgba(212, 176, 103, 0.7);
+    --chart-category-1: #d4b067;
+    --chart-category-2: #bfa05a;
+    --chart-category-3: #e6c587;
+    --chart-category-4: #dec695;
+    --chart-category-5: #ebd1a0;
+    --chart-region-bg: var(--color-surface);
+    --chart-drill-bar: linear-gradient(180deg, #d4b067 0%, rgba(212, 176, 103, 0.3) 100%);
+}

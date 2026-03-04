@@ -64,50 +64,34 @@ graph TD
 
 ---
 
-## 3. Microservices Architecture
+## 3. unified Service Architecture
 
-### 3.1 Microservices Breakdown
-The backend is composed of high-cohesion, loosely coupled services.
+### 3.1 Services Breakdown
+The backend is composed of a unified monolithic Go service serving APIs and Websockets, while encapsulating specialized agent logic via Langchain-inspired patterns.
 
 ```mermaid
 graph TD
     FE["Frontend (Next.js)"]
     
-    subgraph "Backend Cluster"
-        Gateway["API Gateway (Go)"]
-        AuthSvc["Auth Service (Go)"]
-        AgentCore["Agent Core Service (Go)"]
-        IngestSvc["Ingestion Service (Go)"]
-        YieldSvc["Forecasting Service (Python)"]
-        CommSvc["Communication Service (Go)"]
-        ActionSvc["Action Service (Go)"]
+    subgraph "Backend System"
+        Gateway["API Server (Gin)"]
+        AgentCore["Agent Supervisor (Go)"]
     end
     
     FE <-->|"REST / SSE"| Gateway
-    
-    Gateway <-->|"gRPC"| AuthSvc
-    Gateway <-->|"gRPC"| AgentCore
-    Gateway <-->|"gRPC"| IngestSvc
-    Gateway <-->|"gRPC"| CommSvc
-    Gateway <-->|"gRPC"| ActionSvc
-    
-    AgentCore <-->|"gRPC"| IngestSvc
-    AgentCore <-->|"gRPC"| YieldSvc
-    AgentCore <-->|"gRPC"| CommSvc
-    AgentCore <-->|"gRPC"| ActionSvc
+    Gateway <-->|"Context Delegation"| AgentCore
 ```
 
-### 3.2 Microservices Inventory
+### 3.2 Key Application Components
 
-| Service Name | Language | Role | Inbound Protocol | Dependencies |
+| Component Name | Language | Role | Inbound Protocol | Dependencies |
 | :--- | :--- | :--- | :--- | :--- |
-| **API Gateway** | Go (Gin) | Traffic Entry, Rate Limiting, Routing, SSE Streaming. | HTTP/REST | All Services |
-| **Auth Service** | Go | Identity Provider (OIDC), Token Issuance, RBAC. | gRPC | Postgres (Users) |
-| **Agent Core** | Go (LangChain) | Hosting Agent Loops (Supervisor, Analyst, etc.), Tool Execution. | gRPC | Postgres, Vector DB |
-| **Ingestion Svc** | Go | Data Parsing (CSV/XLSX), Validation, Bulk Load. | gRPC / S3 Events | Postgres, S3 |
-| **Forecast Svc** | Python (FastAPI) | Running ML Models (Prophet, ARIMA) for demand prediction. | gRPC | - |
-| **Comm Service** | Go | Sending Emails, Notifications, and PDF Report Generation. | gRPC | SMTP, Templates |
-| **Action Svc** | Go | Executing Write-backs (ERP updates), Audit Logging, Approvals. | gRPC | Postgres (Audit) |
+| **API Server** | Go (Gin) | Traffic Entry, Rate Limiting, Routing, SSE Streaming. | HTTP/REST | All Services |
+| **Supervisor Agent** | Go | Delegates Chat Context to other worker agents and captures Episodic Memory via PgVector. | Internal API | Postgres (Users) |
+| **Analyst Agent** | Go | Translates Natural Language to SQL and retrieves accurate retail schema data (ReAct). | Internal API | Postgres, Vector DB |
+| **Watchdog Agent** | Go | A daemon/trigger agent that scans for internal business anomalies and saves to Alerts DB. | Internal API / Cron | Postgres |
+| **Planner Agent** | Go | Breaks down strategies into discrete UI-executable actions for the user dashboard. | Internal API | Postgres (Audit) |
+| **Strategist Agent** | Go | Provides long-form analytical responses using Chain of Thought processing over data context. | Internal API | LLM API |
 
 ---
 

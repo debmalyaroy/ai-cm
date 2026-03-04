@@ -28,7 +28,7 @@ coverage/
 *.test
 *.out
 vendor/
-go.sum
+.claude/
 
 # Python (ML)
 __pycache__/
@@ -43,8 +43,6 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
 parts/
 sdist/
 var/
@@ -67,3 +65,11 @@ venv/
 data/
 *.db
 *.sqlite
+
+# Coverage
+coverage
+coverage.out
+coverage.html
+*_cov.out
+*_cov.html
+*_cov

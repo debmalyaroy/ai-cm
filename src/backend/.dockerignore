@@ -1,0 +1,36 @@
+# Test files
+*_test.go
+**/*_test.go
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+docs/
+plan/
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# Temporary
+tmp/
+*.tmp
+
+# Coverage
+coverage
+coverage/
+coverage.out
+coverage.html
+*_cov.out
+*_cov.html
+*_cov

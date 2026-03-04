@@ -1,0 +1,65 @@
+name: Deploy AI-CM to AWS
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  DOCKER_IMAGE: aicm-backend
+  DOCKER_REGISTRY: ${{ secrets.DOCKER_USERNAME }} # Set this to your docker registry or AWS ECR URI
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        # Assumes Docker Hub. Swap logic for AWS ECR if strictly relying on AWS ECR.
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build & Push Backend Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./src/backend
+          file: ./infra/Dockerfile.backend
+          push: true
+          tags: ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE }}:latest
+
+  deploy-to-ec2:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Copy config files to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.AWS_EC2_HOST }}
+          username: ${{ secrets.AWS_EC2_USER }}
+          key: ${{ secrets.AWS_SSH_PRIVATE_KEY }}
+          source: "infra/docker-compose.prod.yml,scripts/aws_deploy.sh,src/prompts/,config/config.prod.yaml"
+          target: "~/aicm-deploy"
+
+      - name: SSH and Trigger Deployment
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.AWS_EC2_HOST }}
+          username: ${{ secrets.AWS_EC2_USER }}
+          key: ${{ secrets.AWS_SSH_PRIVATE_KEY }}
+          script: |
+            # Set up the registry variable dynamically before pulling down the compose images
+            cd ~/aicm-deploy
+            export DOCKER_REGISTRY=${{ secrets.DOCKER_USERNAME }}
+            export LLM_PROVIDER=bedrock
+
+            # Make the deploy wrapper executable and run it
+            chmod +x scripts/aws_deploy.sh
+            ./scripts/aws_deploy.sh
