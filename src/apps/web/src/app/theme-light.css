@@ -1,0 +1,33 @@
+/* =============== Light Theme =============== */
+:root:not(.dark) {
+    --color-bg: #f5f5f7;
+    --color-surface: #ffffff;
+    --color-surface-hover: rgba(0, 0, 0, 0.04);
+    --color-sidebar: #fafafa;
+    --color-border: #e2e4e9;
+    --color-border-light: #d1d5db;
+    --color-text: #1a1a2e;
+    --color-text-secondary: #6b7280;
+    --color-text-muted: #9ca3af;
+    --color-primary: #8b6914;
+    --color-primary-hover: #6d5210;
+    --color-primary-glow: rgba(139, 105, 20, 0.10);
+    --color-gradient-gold: linear-gradient(135deg, #c9a22a 0%, #a68620 100%);
+    --color-success: #059669;
+    --color-warning: #d97706;
+    --color-danger: #dc2626;
+    --color-info: #2563eb;
+    --color-modal-backdrop: rgba(0, 0, 0, 0.3);
+
+    /* Graph/Chart colors - light mode (vibrant & readable on white) */
+    --chart-bar-start: #2563eb;
+    --chart-bar-end: rgba(37, 99, 235, 0.15);
+    --chart-bar-hover: rgba(37, 99, 235, 0.6);
+    --chart-category-1: #2563eb;
+    --chart-category-2: #7c3aed;
+    --chart-category-3: #059669;
+    --chart-category-4: #d97706;
+    --chart-category-5: #dc2626;
+    --chart-region-bg: #ffffff;
+    --chart-drill-bar: linear-gradient(180deg, #2563eb 0%, rgba(37, 99, 235, 0.15) 100%);
+}

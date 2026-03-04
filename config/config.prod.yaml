@@ -1,0 +1,38 @@
+# AI-CM Backend Configuration - PRODUCTION
+# Secrets (API keys) should be provided via environment variables or .env file
+
+server:
+  port: 8080
+  read_timeout_sec: 30
+  write_timeout_sec: 300
+  shutdown_sec: 5
+
+database:
+  url: "postgres://aicm:aicm_secret@db:5432/aicm?sslmode=disable"
+  max_conns: 50
+  min_conns: 5
+  max_conn_life_sec: 3600
+
+llm:
+  provider: "aws" # options: aws, openai, gemini, local
+  temperature: 0.0 # for production
+  local_url: "http://localhost:11434/api/generate"
+  local_model: "llama3.2"
+  gemini_model: "gemini-2.0-flash"
+  openai_model: "gpt-4o-mini"
+  agent_models:
+    supervisor: "anthropic.claude-3-haiku-20240307-v1:0"
+    analyst: "anthropic.claude-3-5-sonnet-20240620-v1:0" # Optimal reasoning structure
+    planner: "anthropic.claude-3-haiku-20240307-v1:0"
+    strategist: "anthropic.claude-3-5-sonnet-20240620-v1:0"
+    liaison: "anthropic.claude-3-haiku-20240307-v1:0"
+    watchdog: "anthropic.claude-3-haiku-20240307-v1:0"
+
+logging:
+  level: "info" # debug, info, warn, error
+  format: "json" # json, text
+
+cors:
+  allow_origins:
+    - "http://localhost:80"
+    - "https://yourdomain.com"

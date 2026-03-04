@@ -1,0 +1,82 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: aicm-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-aicm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-aicm}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aicm}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  backend:
+    build:
+      context: ../src/backend
+      dockerfile: ../../infra/Dockerfile.backend
+    container_name: aicm-backend
+    restart: unless-stopped
+    environment:
+      # Overrides the database.url in config.yaml
+      DATABASE_URL: postgres://${POSTGRES_USER:-aicm}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-aicm}?sslmode=disable
+      # LLM provider — must be "aws" in production
+      LLM_PROVIDER: "aws"
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      # Agent-level model overrides (optional — config.yaml already sets these)
+      AWS_BEDROCK_MODEL: ${AWS_BEDROCK_MODEL:-anthropic.claude-3-haiku-20240307-v1:0}
+      PROMPT_DIR: "/app/prompts"
+    volumes:
+      - ../src/prompts:/app/prompts
+      - ./config.prod.yml:/app/config.yaml:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  frontend:
+    build:
+      context: ../src/apps/web
+      dockerfile: ../../../infra/Dockerfile.frontend
+      args:
+        # Public API URL must point to the nginx proxy (same host, port 80)
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost}
+    container_name: aicm-frontend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost}
+      INTERNAL_API_URL: http://backend:8080
+    depends_on:
+      - backend
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  nginx:
+    image: nginx:alpine
+    container_name: aicm-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend
+      - backend
+
+volumes:
+  pgdata:

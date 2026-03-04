@@ -1,0 +1,43 @@
+# Dependencies (reinstalled in Docker)
+node_modules/
+
+# Build output
+.next/
+out/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+docs/
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# Tests
+__tests__/
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+jest.config.*
+cypress/
+
+# Env files (secrets)
+.env
+.env.local
+.env.*.local
+
+# Coverage
+coverage/
+coverage.html
+coverage.out
