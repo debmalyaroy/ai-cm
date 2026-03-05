@@ -293,16 +293,16 @@ When users ask strategic questions, the system checks past actions and alerts us
 
 ```mermaid
 graph LR
-    User(User Query "Why are sales down?") --> Router(Supervisor Agent)
+    User("User Query 'Why are sales down?'") --> Router("Supervisor Agent")
     Router -->|If requires reasoning| Strategist
     
-    subgraph Data Warehouse
+    subgraph Data_Warehouse [Data Warehouse]
         Fact_Sales[fact_sales]
         Dim_Date[dim_date]
         Dim_Products[dim_products]
     end
     
-    subgraph Vector Data Store
+    subgraph Vector_Data_Store [Vector Data Store]
         Memory[pgvector Chat History]
         Alerts[pgvector Recent Anomalies]
         Actions[pgvector Execution Logs]
