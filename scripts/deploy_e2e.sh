@@ -42,11 +42,13 @@ elif [ "$ENV_TARGET" == "prod" ]; then
     fi
 
     pushd "$INFRA_DIR" > /dev/null
-    docker compose --env-file "$ENV_FILE" -f docker-compose.prod.yml pull
+    # Build images from source and start containers.
+    # Note: Next.js build requires ~512MB RAM; ensure the host has swap configured.
+    # See scripts/aws_deploy.sh for swap setup on EC2.
     docker compose --env-file "$ENV_FILE" -f docker-compose.prod.yml up --build -d
     popd > /dev/null
 
-    echo -e "\033[32m✅ Production deployment complete. Backend listens on 8080.\033[0m"
+    echo -e "\033[32m✅ Production deployment complete. App accessible on port 80 (nginx).\033[0m"
 
 else
     echo -e "\033[31mUnknown target: $ENV_TARGET. Use 'local' or 'prod'.\033[0m"

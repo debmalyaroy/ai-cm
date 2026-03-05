@@ -15,8 +15,9 @@ import (
 )
 
 type BedrockClient struct {
-	client *bedrockruntime.Client
-	model  string
+	client      *bedrockruntime.Client
+	model       string
+	temperature float64
 }
 
 // ClaudeMessage represents the Anthropic Messages API format used by Bedrock
@@ -30,7 +31,9 @@ type ClaudeRequest struct {
 	MaxTokens        int             `json:"max_tokens"`
 	System           string          `json:"system,omitempty"`
 	Messages         []ClaudeMessage `json:"messages"`
-	Temperature      float64         `json:"temperature,omitempty"`
+	// Temperature must NOT use omitempty — 0.0 is a valid value and omitting it
+	// would cause Claude to use its default (1.0), producing non-deterministic SQL.
+	Temperature float64 `json:"temperature"`
 }
 
 type ClaudeResponse struct {
@@ -41,7 +44,7 @@ type ClaudeResponse struct {
 
 // NewBedrockClient creates a new Bedrock client utilizing AWS SDK Go v2
 func NewBedrockClient(cfg *cfgpkg.Config) (*BedrockClient, error) {
-	// Assumes standard AWS credentials resolution (Env Vars, Profile, EC2 IAM)
+	// Assumes standard AWS credentials resolution (Env Vars, Profile, EC2 IAM role)
 	awscfg, err := config.LoadDefaultConfig(context.Background(), config.WithRegion(cfg.LLM.AWSRegion))
 	if err != nil {
 		return nil, fmt.Errorf("unable to load AWS config: %v", err)
@@ -56,8 +59,9 @@ func NewBedrockClient(cfg *cfgpkg.Config) (*BedrockClient, error) {
 	}
 
 	return &BedrockClient{
-		client: client,
-		model:  model,
+		client:      client,
+		model:       model,
+		temperature: float64(cfg.LLM.Temperature),
 	}, nil
 }
 
@@ -72,7 +76,7 @@ func (b *BedrockClient) Generate(ctx context.Context, systemPrompt, userPrompt s
 				Content: userPrompt,
 			},
 		},
-		Temperature: 0.0,
+		Temperature: b.temperature,
 	}
 
 	payload, err := json.Marshal(req)
@@ -114,7 +118,7 @@ func (b *BedrockClient) GenerateStream(ctx context.Context, systemPrompt, userPr
 				Content: userPrompt,
 			},
 		},
-		Temperature: 0.0,
+		Temperature: b.temperature,
 	}
 
 	payload, err := json.Marshal(req)
@@ -180,7 +184,8 @@ func (b *BedrockClient) WithModel(model string) Client {
 		return b
 	}
 	return &BedrockClient{
-		client: b.client,
-		model:  model,
+		client:      b.client,
+		model:       model,
+		temperature: b.temperature,
 	}
 }

@@ -1,118 +1,259 @@
-# AWS Deployment Guide (Free Tier + Bedrock Optimization)
+# AWS Deployment Guide (Free Tier + Bedrock)
 
-This document provides a step-by-step process for deploying the AI Category Manager to AWS using Free Tier services wherever possible and utilizing Amazon Bedrock for highly optimized, cost-effective LLM performance.
-
----
-
-## 1. Architectural Overview & Cost Strategy
-To keep costs minimal to zero, we leverage AWS Free Tier:
-- **Compute:** EC2 `t3.micro` (or `t2.micro` depending on region) - 750 hours/month free for 12 months.
-- **Database:** RDS for PostgreSQL `db.t3.micro` or `db.t4g.micro` - 750 hours/month free for 12 months (requires `pgvector` supported engine).
-- **LLM (Amazon Bedrock):** Not free tier, but highly cost-controlled using **Agent-Specific Model Routing**:
-  - **Analyst (Text-to-SQL + heavy reasoning):** `anthropic.claude-3-5-sonnet-20241022-v2:0` (highly capable, moderate cost).
-  - **Planner / Strategist / Liaison:** `anthropic.claude-3-haiku-20240307-v1:0` (extremely fast, very low cost).
-- **Container Registry (DockerHub vs AWS ECR):** 
-  - AWS ECR Free Tier gives 500MB/month of storage. If your images exceed this, ECR will incur storage costs. 
-  - **Cost Optimization:** Use a standard **DockerHub** free account. Build the images via GitHub Actions and push to DockerHub, then pull from DockerHub on your EC2 instance. This avoids ECR costs entirely.
+This guide deploys AI-CM on AWS using **Free Tier** services for compute and database, and **Amazon Bedrock** for LLM inference with agent-specific model routing to minimise cost.
 
 ---
 
-## 2. Infrastructure Setup (RDS & EC2)
+## 1. Architecture & Cost Strategy
 
-### Step 2.1: Setup RDS PostgreSQL (Free Tier)
-1. Go to **AWS Console > RDS** and click **Create database**.
-2. Select **Standard create**, Engine: **PostgreSQL** (version 15 or higher).
-3. **Crucial:** Under Templates, select **Free tier**.
-4. Set DB instance identifier, Master username (`postgres`), and a strong password.
-5. In **Connectivity**, ensure it's in a VPC your EC2 can access, and set **Public access** to **No**.
-6. **Security Group:** Create a new security group that allows inbound TCP 5432 from your EC2 instance's security group.
-7. Click **Create database**. Once active, note the Endpoint URL.
+| Layer | Service | Free Tier | Notes |
+|---|---|---|---|
+| **Compute** | EC2 `t3.micro` (or `t2.micro`) | 750 hrs/month for 12 months | 1 vCPU, 1GB RAM. Add 2GB swap for Next.js build. |
+| **Database** | RDS PostgreSQL `db.t3.micro` | 750 hrs/month for 12 months | 20GB storage included. Enable `pgvector` extension. |
+| **LLM** | Amazon Bedrock | **Pay-per-token** (no free tier) | Controlled via agent-specific model routing below. |
+| **Reverse Proxy** | nginx (container on EC2) | Free | Routes `/api/*` to backend, `/` to frontend. |
+| **Registry** | DockerHub (free tier) | 1 public repo free | **Alternative to ECR** — avoids storage costs entirely. |
 
-### Step 2.2: Prepare EC2 Instance (Free Tier)
-1. Go to **AWS Console > EC2** and click **Launch Instances**.
-2. Select **Amazon Linux 2023 AMI** or **Ubuntu 24.04 LTS**.
-3. Select Instance Type: `t3.micro` or `t2.micro` (marked "Free tier eligible").
-4. **Key pair (SSH Access):** 
-   - Click **Create new key pair**. Name it (e.g., `aicm-key`), choose RSA, format `.pem`.
-5. **Network settings:** Allow SSH (port 22) and HTTP (port 80) from anywhere (0.0.0.0/0).
-6. **IAM Role:** VERY IMPORTANT. Create an IAM Role attached to this EC2 instance that has `AmazonBedrockFullAccess` (or a restricted policy allowing `bedrock:InvokeModel`).
-7. Click **Launch instance**.
+### Bedrock Model Routing (Optimised for Cost)
+
+Each agent uses the cheapest model that is capable of its task:
+
+| Agent | Task | Model | Cost (per MTok in/out) |
+|---|---|---|---|
+| **Supervisor** | Intent classification (one word) | `claude-3-haiku-20240307-v1:0` | $0.25 / $1.25 |
+| **Analyst** | Text-to-SQL + ReAct loop (3 retries) | `claude-3-5-sonnet-20241022-v2:0` | $3.00 / $15.00 |
+| **Strategist** | Chain-of-Thought "why" explanations | `claude-3-5-haiku-20241022-v1:0` | $0.80 / $4.00 |
+| **Planner** | Structured JSON action proposals | `claude-3-5-haiku-20241022-v1:0` | $0.80 / $4.00 |
+| **Liaison** | Email / compliance report drafting | `claude-3-5-haiku-20241022-v1:0` | $0.80 / $4.00 |
+| **Watchdog** | Rule-based (no LLM calls) | `claude-3-haiku-20240307-v1:0` (fallback) | N/A |
+
+**Analyst uses Sonnet** because Text-to-SQL is the hardest task (requires understanding a multi-table retail schema and self-correcting SQL errors). All other agents are on Haiku variants.
 
 ---
 
-## 3. Configuration Generation
+## 2. Pre-requisites (One-Time Setup)
 
-On your EC2 machine, you will configure `.env.prod` to optimize the dual-LLM constraint strategy to minimize costs:
+### 2.1 Request Bedrock Model Access
 
-Create `config/.env.prod`:
+1. Open **AWS Console → Amazon Bedrock → Model access**.
+2. Click **Modify model access**.
+3. Request access to:
+   - `Anthropic — Claude 3 Haiku`
+   - `Anthropic — Claude 3.5 Haiku`
+   - `Anthropic — Claude 3.5 Sonnet v2`
+4. Access is usually granted within minutes.
+
+### 2.2 Create IAM Role for EC2
+
+1. Go to **IAM → Roles → Create role**.
+2. Trusted entity: **AWS service → EC2**.
+3. Attach policy: **AmazonBedrockFullAccess** (or a custom policy with `bedrock:InvokeModel` + `bedrock:InvokeModelWithResponseStream` only).
+4. Name the role `aicm-ec2-role`.
+
+> The backend Go app uses the EC2 IAM role automatically via the AWS SDK credential chain. **No access keys are needed on the EC2 instance.**
+
+### 2.3 Create RDS PostgreSQL Instance
+
+1. **AWS Console → RDS → Create database**.
+2. Settings:
+   - Engine: **PostgreSQL 16**
+   - Template: **Free tier**
+   - DB identifier: `aicm-postgres`
+   - Master username: `aicm`
+   - Master password: (choose a strong password)
+   - Instance: `db.t3.micro`
+   - Storage: 20 GB gp2
+   - **Public access: No** (only accessible from your VPC)
+3. Under **Additional configuration**, set Initial database name: `aicm`.
+4. Under **VPC security group**, create a new SG that allows TCP 5432 **from the EC2 security group** (not from the internet).
+5. Click **Create database**. Note the **Endpoint URL** once available.
+
+#### Initialize the Database Schema
+
+After RDS is available, SSH into your EC2 instance and run the init scripts once:
+
+```bash
+# Install psql client (Amazon Linux 2023)
+sudo dnf install -y postgresql15
+
+# Run all schema + seed scripts
+for f in ~/ai-cm/infra/postgres/*.sql; do
+    echo "Running $f..."
+    PGPASSWORD=your_rds_password psql \
+        -h your-rds-endpoint.us-east-1.rds.amazonaws.com \
+        -U aicm -d aicm -f "$f"
+done
+```
+
+> The scripts in `infra/postgres/` create the schema, pgvector extension, and seed ~157K rows of retail data.
+
+### 2.4 Launch EC2 Instance
+
+1. **EC2 → Launch Instances**.
+2. Settings:
+   - AMI: **Amazon Linux 2023** (or Ubuntu 24.04 LTS)
+   - Type: `t3.micro` (Free tier eligible)
+   - Key pair: Create `aicm-key.pem` (RSA, .pem format)
+   - Security group: Allow **SSH (22)** and **HTTP (80)** from `0.0.0.0/0`
+   - IAM instance profile: **`aicm-ec2-role`** (CRITICAL — enables Bedrock access)
+3. Launch. Once running, allocate and associate an **Elastic IP** to prevent IP changes on restart.
+
+---
+
+## 3. Configure Production Environment
+
+On your **local machine**, edit `config/.env.prod` (never commit this file):
+
 ```env
-# Backend Logger Config
-LOG_LEVEL=INFO
-
-# LLM Selection
-LLM_PROVIDER=aws
-
-# Production DB Secrets
-POSTGRES_USER=postgres
+POSTGRES_USER=aicm
 POSTGRES_PASSWORD=your_rds_password
-POSTGRES_DB=ai_cm
-DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@your-rds-endpoint.us-east-1.rds.amazonaws.com:5432/${POSTGRES_DB}?sslmode=require
+POSTGRES_DB=aicm
+DATABASE_URL=postgres://aicm:your_rds_password@your-rds-endpoint.us-east-1.rds.amazonaws.com:5432/aicm?sslmode=require
 
-# AWS Bedrock/ECR Details
 AWS_REGION=us-east-1
 
-# Registry
-DOCKER_REGISTRY=yourdockerhubusername
+NEXT_PUBLIC_API_URL=http://your-elastic-ip
+INTERNAL_API_URL=http://backend:8080
 
-# Endpoints
-NEXT_PUBLIC_API_URL=http://your-ec2-elastic-ip
+# IDs for the start/stop helper script
+EC2_INSTANCE_ID=i-0123456789abcdef0
+RDS_INSTANCE_ID=aicm-postgres
 ```
 
-Ensure `config/config.prod.yaml` is also populated with your model routing routing configuration (Sonnet + Haiku) as detailed in the GitHub repo.
+> **`config/config.prod.yaml`** contains non-secret configuration (model routing, server timeouts, rate limits). The env file overrides DB credentials and URLs at runtime.
 
 ---
 
-## 4. End-to-End Deployment Script
+## 4. Deploy to EC2
 
-1. SSH into your `t3.micro` instance using the `.pem` key you generated earlier:
+### Step 1 — SSH into EC2
+
 ```bash
-chmod 400 your-key.pem
-ssh -i "your-key.pem" ubuntu@<your-ec2-public-ip>
+chmod 400 aicm-key.pem
+ssh -i aicm-key.pem ec2-user@your-elastic-ip
 ```
 
-2. Run the deployment sequence:
-```bash
-git clone https://github.com/debmalyaroy/ai-cm.git
-cd ai-cm
-# Copy the env template and fill in your details
-cp config/.env.prod config/.env.prod.active
-nano config/.env.prod.active # Add RDS details, DockerHub username
+### Step 2 — Bootstrap (first time only)
 
-# Run the unified deployment wrapper
-chmod +x scripts/deploy_e2e.sh
-./scripts/deploy_e2e.sh prod
+Upload your `.env.prod` to the EC2 instance first:
+```bash
+# From your local machine
+scp -i aicm-key.pem config/.env.prod ec2-user@your-elastic-ip:~/ai-cm-env.prod
 ```
 
-## 5. Exposing the Frontend publicly
+Then on EC2, run the bootstrap script:
+```bash
+# Clone the repo and run the one-time bootstrap
+curl -fsSL https://raw.githubusercontent.com/debmalyaroy/ai-cm/master/scripts/aws_deploy.sh | bash
+# Or after cloning:
+cd ai-cm && chmod +x scripts/aws_deploy.sh && ./scripts/aws_deploy.sh
+```
 
-When the docker containers are running, the frontend binds to Port `80` on the EC2 instance.
+The `aws_deploy.sh` script:
+1. Installs Docker, Git
+2. Creates **2GB swap** (required for Next.js build on 1GB RAM t3.micro)
+3. Clones/updates the repository
+4. Validates your `.env.prod`
+5. Calls `./scripts/deploy_e2e.sh prod` to build and start all containers
 
-**Free & Secure Public Exposition Options:**
-1. **AWS Elastic IP (EIP):**
-   - Allocate a free Elastic IP address in the EC2 dashboard and associate it with your EC2 instance. This prevents your IP from changing if the instance reboots. Connect directly via `http://<your-elastic-ip>`.
-2. **Cloudflare (Recommended for HTTPS + DDOS Protection):**
-   - Cloudflare offers a free tier. Sign up, add your custom domain, and point an `A` record to your Elastic IP. 
-   - Enable Cloudflare's "Flexible" or "Full" SSL. You get immediate HTTPS on your public domain with caching and basic security without any AWS ALB costs.
-3. **Frontend decoupling (Vercel/Amplify):**
-   - Deploy `src/apps/web` to Vercel (free tier) and set `NEXT_PUBLIC_API_URL` to your EC2 backend IP. This provides optimal frontend scaling.
+### Step 3 — Subsequent Deployments
+
+For code updates, just re-run the deployment wrapper:
+```bash
+cd ~/ai-cm && git pull && ./scripts/deploy_e2e.sh prod
+```
 
 ---
 
-## 6. Model Access in AWS Bedrock
+## 5. What Runs After Deployment
 
-By default, Amazon Bedrock models are NOT enabled. You must request access to them:
-1. Open the **AWS Console** and search for **Amazon Bedrock**.
-2. Click **Manage model access** (top right). Select **Claude 3 Haiku** and **Claude 3.5 Sonnet**. Request access.
+```
+Internet → Elastic IP → EC2 Port 80 → nginx
+                                         ├── /api/* → backend:8080 (Go, Bedrock)
+                                         └── /      → frontend:3000 (Next.js)
+```
 
-### Permissions (Crucial)
-Your EC2 instance **must** have an IAM role attached. Without it, the backend Go application will not be able to securely interact with the Bedrock APIs without hardcoded IAM keys in the `.env` file (which is an anti-pattern).
+The `nginx` container handles:
+- SSE streaming (proxy_buffering off, 310s timeout)
+- WebSocket upgrade for Next.js HMR (if needed)
+- Clean separation of `/api/*` from frontend routes
+
+Check that everything is running:
+```bash
+docker ps
+curl http://localhost/api/health
+```
+
+Expected health response:
+```json
+{"database":"ok","provider":"aws","status":"ok","time":"..."}
+```
+
+---
+
+## 6. Free Tier — Staying Within Limits
+
+### EC2 Free Tier
+- **750 hours/month** of `t3.micro` (or `t2.micro`) for **12 months** from account creation.
+- 750 hours = exactly one instance running 24/7 for a month.
+- If you have multiple instances or are past 12 months, **stop the instance when not in use**.
+
+### RDS Free Tier
+- **750 hours/month** of `db.t3.micro` for **12 months**.
+- **20 GB SSD storage** included.
+- ⚠️ **AWS auto-starts stopped RDS instances after 7 days** — you must stop it again or it will accumulate hours.
+
+### Start / Stop Helper Script
+
+Use the provided helper to start and stop both EC2 and RDS together:
+
+```bash
+# Linux / Mac (from repo root)
+./scripts/aws_startstop.sh status   # check current state
+./scripts/aws_startstop.sh start    # start EC2 + RDS (waits for both to be ready)
+./scripts/aws_startstop.sh stop     # stop EC2 + RDS
+
+# Windows PowerShell
+.\scripts\aws_startstop.ps1 status
+.\scripts\aws_startstop.ps1 start
+.\scripts\aws_startstop.ps1 stop
+```
+
+The script reads `EC2_INSTANCE_ID` and `RDS_INSTANCE_ID` from `config/.env.prod` automatically.
+
+**Prerequisites:** AWS CLI v2 installed and configured (`aws configure`) with a user that has `ec2:StartInstances`, `ec2:StopInstances`, `rds:StartDBInstance`, `rds:StopDBInstance` permissions.
+
+### Cost When Stopped
+| Resource | Running Cost | Stopped Cost |
+|---|---|---|
+| EC2 t3.micro | ~$0.0104/hr ($7.50/mo) | **$0** (EBS ~$0.80/mo) |
+| RDS db.t3.micro | ~$0.016/hr ($11.52/mo) | **$0** (storage ~$2.30/mo) |
+| Bedrock | Per-token only | **$0** |
+
+---
+
+## 7. HTTPS / Custom Domain (Optional)
+
+For HTTPS without an AWS ALB (which is not free tier), use **Cloudflare**:
+
+1. Register a free Cloudflare account at cloudflare.com.
+2. Add your domain, create an `A` record pointing to your **Elastic IP**.
+3. Enable **Flexible SSL** in Cloudflare (traffic between user ↔ Cloudflare is HTTPS; Cloudflare ↔ EC2 is HTTP).
+4. Update `config/.env.prod`: set `NEXT_PUBLIC_API_URL=https://yourdomain.com`
+5. Update `config/config.prod.yaml` CORS: add `https://yourdomain.com` to `allow_origins`.
+6. Redeploy: `./scripts/deploy_e2e.sh prod`
+
+> For true end-to-end HTTPS, use Cloudflare **Full (strict)** mode with a Let's Encrypt certificate installed in nginx.
+
+---
+
+## 8. Troubleshooting
+
+| Symptom | Likely Cause | Fix |
+|---|---|---|
+| `bedrock invoke failed: no credentials` | EC2 IAM role not attached | Attach `aicm-ec2-role` to EC2 instance in console |
+| `bedrock invoke failed: access denied on model` | Model access not requested | Request access in Bedrock → Model access |
+| Next.js build OOM killed | Insufficient RAM | Verify 2GB swap exists: `free -h` |
+| Can't connect to RDS | Security group misconfigured | EC2 SG must be allowed on port 5432 in RDS SG |
+| `sslmode=disable` error from backend | Config not overridden | Verify `DATABASE_URL` env var is set correctly |
+| RDS started unexpectedly | AWS 7-day auto-start policy | Stop RDS again via `aws_startstop.sh stop` |
