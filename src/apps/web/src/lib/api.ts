@@ -1,15 +1,23 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
 export async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> {
-    const res = await fetch(`${API_BASE}${endpoint}`, {
-        method: 'POST',
+    const method = options?.method || 'POST';
+    const reqOptions: RequestInit = {
         ...options,
+        method,
         headers: {
             'Content-Type': 'application/json',
             ...options?.headers,
         },
-        body: options?.body || '{}',
-    });
+    };
+
+    if (method !== 'GET' && method !== 'HEAD') {
+        reqOptions.body = options?.body || '{}';
+    } else {
+        delete reqOptions.body;
+    }
+
+    const res = await fetch(`${API_BASE}${endpoint}`, reqOptions);
     if (!res.ok) {
         const err = await res.json().catch(() => ({ error: res.statusText }));
         throw new Error(err.error || `API error: ${res.status}`);
@@ -186,8 +194,7 @@ export interface Action {
 export const actionsAPI = {
     getActions: (status?: string) =>
         fetchAPI<Action[]>(`/api/actions${status ? `?status=${status}` : ''}`, {
-            method: 'POST',
-            body: JSON.stringify({ status }),
+            method: 'GET',
         }),
     approveAction: (id: string) =>
         fetchAPI<{ message: string }>(`/api/actions/${id}/approve`, { body: '{}' }),
