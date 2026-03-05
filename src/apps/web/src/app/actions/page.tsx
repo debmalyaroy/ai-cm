@@ -337,7 +337,7 @@ export default function ActionsPage() {
     const [selectedAction, setSelectedAction] = useState<Action | null>(null);
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [sortBy, setSortBy] = useState<SortField>("updated");
-    const [viewMode, setViewMode] = useState<ViewMode>("grid");
+    const [viewMode, setViewMode] = useState<ViewMode>("list");
 
     const loadActions = async () => {
         try {
