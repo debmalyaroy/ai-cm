@@ -293,27 +293,27 @@ When users ask strategic questions, the system checks past actions and alerts us
 
 ```mermaid
 graph LR
-    User(User Query "Why are sales down?") --> Router(Supervisor Agent)
-    Router -->|If requires reasoning| Strategist
-    
+    User[User Query: Why are sales down?] --> Router[Supervisor Agent]
+    Router -->|requires reasoning| Strategist[Strategist Agent]
+
     subgraph Data Warehouse
         Fact_Sales[fact_sales]
         Dim_Date[dim_date]
         Dim_Products[dim_products]
     end
-    
+
     subgraph Vector Data Store
         Memory[pgvector Chat History]
         Alerts[pgvector Recent Anomalies]
         Actions[pgvector Execution Logs]
     end
-    
+
     Strategist -->|Sub-Queries via Analyst| Fact_Sales
     Strategist -->|RAG via Embeddings| Memory
     Strategist -->|RAG via Embeddings| Alerts
-    
+
     Strategist -->|"Injects Matrix & RAG Docs"| PromptCompiler
-    PromptCompiler --> Bedrock(LLM)
+    PromptCompiler --> Bedrock[Bedrock (LLM)]
     Bedrock -->|Returns markdown| Supervisor
 ```
 
