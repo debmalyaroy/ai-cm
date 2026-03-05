@@ -99,3 +99,9 @@ INSERT INTO agent_memory (agent_type, memory_type, content, metadata) VALUES
 ('analyst', 'semantic', 'Table dim_locations has 30 cities across 4 regions: North (8), South (7), East (7), West (8). All Indian cities.', '{"source":"schema","table":"dim_locations"}'),
 ('strategist', 'episodic', 'User asked about South region performance. Analysis showed Diapers and Baby Toys growing fastest. MamyPoko gaining market share from Pampers since Nov 2025.', '{"session":"demo","timestamp":"2026-02-20"}'),
 ('watchdog', 'episodic', 'Detected price anomaly: Amazon undercutting Pampers by 12%. Generated alert and price match recommendation.', '{"session":"demo","timestamp":"2026-02-22"}');
+
+-- INITIAL ALERTS
+INSERT INTO alerts (title, severity, category, message, acknowledged) VALUES
+('Competitor Price Drop Detected', 'warning', 'Pricing', 'Amazon has dropped the price of Pampers Active Baby Small by 12% below our MRP. This triggers our minimum margin threshold.', FALSE),
+('Critical Stockout Warning', 'critical', 'Inventory', 'East India warehouse for Huggies Wonder Pants Small is below 15 units. Expected stockout in 5 days based on current demand velocity.', FALSE),
+('Regional Margin Squeeze', 'info', 'Margin', 'South region is seeing a 4% decline in margin for Baby Toys due to increased logistics costs. Recommendation: Review fulfillment routes.', FALSE);

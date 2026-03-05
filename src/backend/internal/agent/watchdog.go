@@ -56,54 +56,68 @@ func (w *WatchdogAgent) Process(ctx context.Context, input *Input) (*Output, err
 
 	var anomalies []Anomaly
 
-	// Check 1: Competitor price drops
-	priceAnomalies, err := w.checkPriceAnomalies(ctx)
-	if err != nil {
-		slog.ErrorContext(ctx, "Watchdog: price check failed", "error", err)
-	} else {
-		anomalies = append(anomalies, priceAnomalies...)
-		w.anomalyCache.Put("price_anomalies", priceAnomalies)
-	}
+	// Determine whether to run standard interval checks or time-based checks
+	isTimeBased := input != nil && input.Query == "time-based-check"
 
-	// Persist expected anomalies to the Alerts database
-	if len(anomalies) > 0 {
-		for _, a := range anomalies {
-			// Skip saving if confidence is too low or it's just 'info' to avoid spam, but here we save all for Issue 2 testability
-			_, err := w.db.Exec(ctx, `
+	if isTimeBased {
+		slog.InfoContext(ctx, "Watchdog: executing specific time-based alerts")
+		timeAnomalies, err := w.checkTimeBasedAlerts(ctx)
+		if err != nil {
+			slog.ErrorContext(ctx, "Watchdog: time-based check failed", "error", err)
+		} else {
+			anomalies = append(anomalies, timeAnomalies...)
+			w.anomalyCache.Put("time_anomalies", timeAnomalies)
+		}
+	} else {
+		// Check 1: Competitor price drops
+		priceAnomalies, err := w.checkPriceAnomalies(ctx)
+		if err != nil {
+			slog.ErrorContext(ctx, "Watchdog: price check failed", "error", err)
+		} else {
+			anomalies = append(anomalies, priceAnomalies...)
+			w.anomalyCache.Put("price_anomalies", priceAnomalies)
+		}
+
+		// Persist expected anomalies to the Alerts database
+		if len(anomalies) > 0 {
+			for _, a := range anomalies {
+				// Skip saving if confidence is too low or it's just 'info' to avoid spam, but here we save all for Issue 2 testability
+				_, err := w.db.Exec(ctx, `
 				INSERT INTO alerts (title, severity, category, message, acknowledged)
 				VALUES ($1, $2, $3, $4, FALSE)
 			`, a.Title, a.Severity, string(a.Type), a.Description)
-			if err != nil {
-				slog.ErrorContext(ctx, "Watchdog: failed to save alert to db", "error", err, "title", a.Title)
+				if err != nil {
+					slog.ErrorContext(ctx, "Watchdog: failed to save alert to db", "error", err, "title", a.Title)
+				}
 			}
 		}
-	}
 
-	// Check 2: Stockout risks
-	stockAnomalies, err := w.checkStockoutRisks(ctx)
-	if err != nil {
-		slog.ErrorContext(ctx, "Watchdog: stock check failed", "error", err)
-	} else {
-		anomalies = append(anomalies, stockAnomalies...)
-		w.anomalyCache.Put("stockout_risks", stockAnomalies)
-	}
+		// Check 2: Stockout risks
+		stockAnomalies, err := w.checkStockoutRisks(ctx)
+		if err != nil {
+			slog.ErrorContext(ctx, "Watchdog: stock check failed", "error", err)
+		} else {
+			anomalies = append(anomalies, stockAnomalies...)
+			w.anomalyCache.Put("stockout_risks", stockAnomalies)
+		}
 
-	// Check 3: Sales anomalies (sudden drops)
-	salesAnomalies, err := w.checkSalesAnomalies(ctx)
-	if err != nil {
-		slog.ErrorContext(ctx, "Watchdog: sales check failed", "error", err)
-	} else {
-		anomalies = append(anomalies, salesAnomalies...)
-		w.anomalyCache.Put("sales_anomalies", salesAnomalies)
-	}
+		// Check 3: Sales anomalies (sudden drops)
+		salesAnomalies, err := w.checkSalesAnomalies(ctx)
+		if err != nil {
+			slog.ErrorContext(ctx, "Watchdog: sales check failed", "error", err)
+		} else {
+			anomalies = append(anomalies, salesAnomalies...)
+			w.anomalyCache.Put("sales_anomalies", salesAnomalies)
+		}
 
-	// Check 4: Excess inventory
-	invAnomalies, err := w.checkExcessInventory(ctx)
-	if err != nil {
-		slog.ErrorContext(ctx, "Watchdog: inventory check failed", "error", err)
-	} else {
-		anomalies = append(anomalies, invAnomalies...)
-		w.anomalyCache.Put("excess_inventory", invAnomalies)
+		// Check 4: Excess inventory
+		invAnomalies, err := w.checkExcessInventory(ctx)
+		if err != nil {
+			slog.ErrorContext(ctx, "Watchdog: inventory check failed", "error", err)
+		} else {
+			anomalies = append(anomalies, invAnomalies...)
+			w.anomalyCache.Put("excess_inventory", invAnomalies)
+		}
 	}
 
 	output.Reasoning = append(output.Reasoning, ReasoningStep{
@@ -282,4 +296,33 @@ func severityForPriceDrop(pct float64) string {
 		return "warning"
 	}
 	return "info"
+}
+
+// checkTimeBasedAlerts simulates a daily goal or summary check that runs on a specific time schedule.
+func (w *WatchdogAgent) checkTimeBasedAlerts(ctx context.Context) ([]Anomaly, error) {
+	slog.DebugContext(ctx, "Watchdog: executing daily time-based alert check")
+	// Example: Daily check for pending actions that need attention
+	rows, err := w.db.Query(ctx, `
+		SELECT COUNT(*) 
+		FROM action_log 
+		WHERE status = 'pending' 
+		AND created_at < NOW() - INTERVAL '2 days'`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var staleCount int
+	if rows.Next() {
+		if err := rows.Scan(&staleCount); err == nil && staleCount > 0 {
+			return []Anomaly{{
+				Type:        "stale_actions",
+				Severity:    "warning",
+				Title:       "Stale Pending Actions",
+				Description: fmt.Sprintf("You have %d pending actions older than 48 hours. Please review them.", staleCount),
+				Confidence:  1.0,
+			}}, nil
+		}
+	}
+	return nil, nil
 }

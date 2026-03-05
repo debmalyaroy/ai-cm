@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { reportsAPI } from "@/lib/api";
 
 interface Report {
     id: string;
@@ -86,8 +87,20 @@ const statusLabel: Record<string, { text: string; color: string; bg: string }> =
 
 export default function ReportsPage() {
     const [typeFilter, setTypeFilter] = useState<string>("all");
+    const [isDownloading, setIsDownloading] = useState(false);
     const types = ["all", ...Array.from(new Set(mockReports.map((r) => r.type)))];
     const filtered = typeFilter === "all" ? mockReports : mockReports.filter((r) => r.type === typeFilter);
+
+    const handleDownload = async () => {
+        setIsDownloading(true);
+        try {
+            await reportsAPI.downloadReport();
+        } catch (err) {
+            console.error('Download failed:', err);
+        } finally {
+            setIsDownloading(false);
+        }
+    };
 
     return (
         <div style={{ maxWidth: 960, margin: "0 auto" }}>
@@ -98,20 +111,38 @@ export default function ReportsPage() {
                         AI-generated reports and analytics
                     </p>
                 </div>
-                <button
-                    style={{
-                        padding: "8px 20px",
-                        borderRadius: 8,
-                        background: "var(--color-gradient-gold)",
-                        color: "white",
-                        border: "none",
-                        fontSize: 14,
-                        fontWeight: 600,
-                        cursor: "pointer",
-                    }}
-                >
-                    + Generate Report
-                </button>
+                <div style={{ display: "flex", gap: 12 }}>
+                    <button
+                        onClick={handleDownload}
+                        disabled={isDownloading}
+                        style={{
+                            padding: "8px 20px",
+                            borderRadius: 8,
+                            background: "var(--color-surface)",
+                            color: "var(--color-primary)",
+                            border: "1px solid var(--color-border)",
+                            fontSize: 14,
+                            fontWeight: 600,
+                            cursor: "pointer",
+                        }}
+                    >
+                        {isDownloading ? "Downloading..." : "📥 Download CSV"}
+                    </button>
+                    <button
+                        style={{
+                            padding: "8px 20px",
+                            borderRadius: 8,
+                            background: "var(--color-gradient-gold)",
+                            color: "white",
+                            border: "none",
+                            fontSize: 14,
+                            fontWeight: 600,
+                            cursor: "pointer",
+                        }}
+                    >
+                        + Generate Report
+                    </button>
+                </div>
             </div>
 
             <div style={{ display: "flex", gap: 8, marginBottom: 24, flexWrap: "wrap" }}>
@@ -178,6 +209,8 @@ export default function ReportsPage() {
                             </div>
                             {report.status === "ready" && (
                                 <button
+                                    onClick={handleDownload}
+                                    disabled={isDownloading}
                                     style={{
                                         padding: "8px 16px",
                                         borderRadius: 6,
@@ -189,7 +222,7 @@ export default function ReportsPage() {
                                         cursor: "pointer",
                                     }}
                                 >
-                                    📥 Download Report
+                                    {isDownloading ? "Downloading..." : "📥 Download Report"}
                                 </button>
                             )}
                         </div>

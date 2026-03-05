@@ -5,8 +5,11 @@ import { alertsAPI, type Alert } from "@/lib/api";
 
 const severityConfig: Record<string, { color: string; bg: string; icon: string }> = {
     critical: { color: "#ef4444", bg: "#ef444420", icon: "🔴" },
+    high: { color: "#ef4444", bg: "#ef444420", icon: "🔴" },
     warning: { color: "#f59e0b", bg: "#f59e0b20", icon: "🟡" },
+    medium: { color: "#f59e0b", bg: "#f59e0b20", icon: "🟡" },
     info: { color: "#3b82f6", bg: "#3b82f620", icon: "🔵" },
+    low: { color: "#3b82f6", bg: "#3b82f620", icon: "🔵" },
 };
 
 export default function AlertsPage() {
@@ -112,13 +115,15 @@ export default function AlertsPage() {
                         </div>
                     </div>
                 ) : filtered.map((alert) => {
-                    const sev = severityConfig[alert.severity];
+                    const sev = severityConfig[alert.severity] ?? severityConfig['info'];
                     return (
                         <div
                             key={alert.id}
                             style={{
                                 background: "var(--color-surface)",
-                                border: `1px solid ${alert.acknowledged ? "var(--color-border)" : sev.color + "40"}`,
+                                borderTop: `1px solid ${alert.acknowledged ? "var(--color-border)" : sev.color + "40"}`,
+                                borderRight: `1px solid ${alert.acknowledged ? "var(--color-border)" : sev.color + "40"}`,
+                                borderBottom: `1px solid ${alert.acknowledged ? "var(--color-border)" : sev.color + "40"}`,
                                 borderLeft: `4px solid ${sev.color}`,
                                 borderRadius: 12,
                                 padding: 20,

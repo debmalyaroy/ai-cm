@@ -25,6 +25,7 @@ export default function ChatPage() {
     const [isLoading, setIsLoading] = useState(false);
     const [sessionId, setSessionId] = useState<string | null>(null);
     const [status, setStatus] = useState("");
+    const [isDark, setIsDark] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const abortRef = useRef<AbortController | null>(null);
 
@@ -35,26 +36,38 @@ export default function ChatPage() {
 
     // Inherit theme from main window
     useEffect(() => {
-        const savedTheme = localStorage.getItem("aicm-theme");
-        if (savedTheme === "light") {
-            document.documentElement.classList.remove("dark");
-        } else {
-            document.documentElement.classList.add("dark");
-        }
+        const checkTheme = () => {
+            const savedTheme = localStorage.getItem("aicm-theme");
+            setIsDark(savedTheme !== "light");
+            if (savedTheme === "light") {
+                document.documentElement.classList.remove("dark");
+            } else {
+                document.documentElement.classList.add("dark");
+            }
+        };
+
+        checkTheme();
 
         // Listen for theme changes via storage events (cross-tab sync)
         const storageHandler = (e: StorageEvent) => {
             if (e.key === "aicm-theme") {
-                if (e.newValue === "light") {
-                    document.documentElement.classList.remove("dark");
-                } else {
-                    document.documentElement.classList.add("dark");
-                }
+                checkTheme();
             }
         };
         window.addEventListener("storage", storageHandler);
         return () => window.removeEventListener("storage", storageHandler);
     }, []);
+
+    const toggleTheme = () => {
+        const newTheme = isDark ? "light" : "dark";
+        localStorage.setItem("aicm-theme", newTheme);
+        setIsDark(!isDark);
+        if (newTheme === "light") {
+            document.documentElement.classList.remove("dark");
+        } else {
+            document.documentElement.classList.add("dark");
+        }
+    };
 
     // Load session: first from localStorage (for mid-stream detach), then from DB
     useEffect(() => {
@@ -187,9 +200,17 @@ export default function ChatPage() {
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
                 <button className="back-btn" onClick={goBack}>← Back to main</button>
                 <h1 className="dashboard-title" style={{ margin: 0 }}>💬 Chat</h1>
-                <span style={{ color: "var(--color-text-secondary)", fontSize: 13 }}>
+                <span style={{ color: "var(--color-text-secondary)", fontSize: 13, flex: 1 }}>
                     {sessionId ? `Session: ${sessionId.slice(0, 8)}...` : "New session"}
                 </span>
+                <button
+                    className="chat-header-btn"
+                    onClick={toggleTheme}
+                    title="Toggle Theme"
+                    style={{ fontSize: "1.2rem", padding: "4px 8px" }}
+                >
+                    {isDark ? "☀️" : "🌙"}
+                </button>
             </div>
 
             {/* Messages */}

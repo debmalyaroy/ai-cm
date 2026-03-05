@@ -49,12 +49,23 @@ cp config/.env.local config/.env.local.active
 |---------|-----|-------------|
 | Frontend | http://localhost:3000 | Next.js Dashboard + Chat |
 | Backend | http://localhost:8080 | Go API (Gin) |
-| PostgreSQL | localhost:5432 | pgvector DB (~50K rows seeded) |
+| PostgreSQL | localhost:5432 | pgvector DB (~157K+ rows seeded) |
 
-**Run tests:**
+**Run backend unit tests:**
 ```bash
-./scripts/run_e2e.sh # or .\scripts\run_e2e.ps1
+cd src/backend && go test ./...
 ```
+
+**Run E2E tests (local only — requires running Postgres and Ollama):**
+```bash
+# Windows
+.\scripts\run_e2e.ps1
+
+# Linux/Mac
+./scripts/run_e2e.sh
+```
+
+> ⚠️ **E2E tests are NOT run in CI** because they require a live PostgreSQL instance and a local Ollama LLM server. Run them manually after starting the stack with `run_local_llm.ps1`.
 
 ---
 
@@ -85,27 +96,33 @@ Since AI-CM utilizes a Multi-Agent architecture relying on specialized prompts, 
 
 ### 1. Multi-Agent System (Cognitive Layer)
 We utilize a **Hub-and-Spoke** agent pattern where a `Supervisor Agent` orchestrates specialized workers:
-*   **🤖 Analyst Agent (ReAct):** Converts text to SQL, queries the database, and self-corrects errors.
+*   **🤖 Analyst Agent (ReAct):** Converts text to SQL, queries the database, and self-corrects errors (up to 3 retries).
 *   **🧠 Strategist Agent (CoT):** Uses Chain-of-Thought reasoning + RAG (Business Context) to explain *why* metrics changed.
 *   **⚡ Planner Agent (Human-in-Loop):** Proposes Actions (Price Match, Restock) and manages User Approvals.
 *   **📧 Liaison Agent:** Handles communication (Email/Reports) with Sellers.
+*   **🔔 Watchdog Agent:** Continuous monitoring for price anomalies, stockout risks, and sales drops. Persists alerts to DB.
+*   **📋 Recommender:** Heuristic rule engine that auto-generates action recommendations from live inventory & pricing data.
 
-### 2. Microservices (Backend Layer)
-Built on a high-performance **Golang Monorepo**:
-*   **Gateway:** Traffic entry and SSE Streaming.
-*   **Auth Service:** OIDC/JWT Identity provider.
-*   **Agent Core:** Hosts the LangChainGo loops.
-*   **Action Service:** Manages ERP write-backs and Audit Logs.
+### 2. Backend Layer
+Built on a high-performance **Golang Monolith**:
+*   **REST API (Gin):** SSE streaming chat, dashboard, actions, alerts, reports endpoints.
+*   **GraphQL:** Alternative query interface for chat suggestions.
+*   **Distributed Cron Scheduler:** DB-locked scheduler (`internal/cron`) triggers Watchdog checks on an interval and at daily scheduled times. Safe for multi-instance deployments.
+*   **Graceful Shutdown:** OS signal handling (`SIGINT`/`SIGTERM`) triggers ordered shutdown of API server → scheduler → DB pool.
 
-### 3. Data Logical Lakehouse
-*   **Raw Zone (MinIO/S3):** Immutable unstructured data.
-*   **Serving Zone (PostgreSQL):** High-performance structured data for Dashboards & SQL Agents.
-*   **Vector Store (pgvector):** Semantic memory for RAG and Long-term Agent memory.
+### 3. Data Layer
+*   **Serving Zone (PostgreSQL + pgvector):** Star-schema fact/dim tables for analytics + vector store for agent memory and RAG.
 
 ---
 
 ## 🚀 Key Features
 1.  **Conversational Data Analysis:** "Why did margin drop in East?" (No SQL needed).
-2.  **Proactive Alerts:** "Stockout predicted in 3 days. Reorder now?"
-3.  **Closed-Loop Execution:** Click "Approve" to update prices in the ERP.
-4.  **Seller Communication:** Automated compliance emails and feedback reports.
+2.  **Proactive Alerts:** Watchdog auto-detects anomalies. Alerts page shows real-time issues with acknowledge workflow. Alerts can also be created directly from chat suggestions.
+3.  **Closed-Loop Actions:** AI-generates action recommendations. Category manager approves, rejects, or reverts. Add comments for audit trail. Pending actions can be edited before approval.
+4.  **Draft Actions with AI:** Enter a heading + details → LLM drafts a formal proposal with title, description, type, confidence score → review and confirm to create as pending.
+5.  **Action Center Views:** Switch between Grid, List (sortable table), and Details views. Sort by Latest Updated, Newest, Oldest, or Status. Every action shows created and updated timestamps.
+6.  **Report Download:** CSV export of key metrics directly from the Reports page or via chat ("Download report").
+7.  **Seller Communication:** Liaison agent drafts compliance emails and performance reports.
+8.  **Distributed Safety:** Cron scheduler uses PostgreSQL row locking to prevent duplicate job execution across multiple backend nodes.
+9.  **Chat Session Persistence:** Full conversation history is stored per session in PostgreSQL and restored when navigating session history.
+10. **Responsive Chat Panel:** Resize the chat panel via drag handle; transitions are disabled during resize for smooth performance.

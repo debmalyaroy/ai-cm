@@ -20,6 +20,7 @@ Each object has:
 3. At least 1 must be type `"download"` or `"email"` or `"action"` (actionable)
 4. Labels should be concise and start with an emoji
 5. Questions should be specific to the data discussed, not generic
+6. CRITICAL: If the assistant response indicates an anomaly, a threshold breach, or something that needs monitoring, you MUST provide at least one `"action"` to `"Create an alert"` for it.
 
 # Few-Shot Example
 
@@ -31,6 +32,6 @@ Each object has:
   {"label": "📊 Compare with South", "type": "question", "value": "How does East India's performance compare with South India for the same period?"},
   {"label": "📦 Check inventory levels", "type": "question", "value": "What are the current inventory levels and days of supply in East India warehouses?"},
   {"label": "📋 Download East report", "type": "download", "value": "Generate a detailed East India performance report for the last quarter"},
-  {"label": "📧 Alert regional team", "type": "email", "value": "Draft an email to the East India regional team about the revenue decline and recovery plan"},
+  {"label": "🔔 Create an alert", "type": "action", "value": "Create an alert if revenue drops further or if competitor pricing changes"},
   {"label": "⚡ Create promotion", "type": "action", "value": "Propose a targeted promotion plan for underperforming SKUs in East India"}
 ]

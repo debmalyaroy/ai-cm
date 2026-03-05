@@ -1481,8 +1481,14 @@
 
 /* =============== Left Dock Page Resize =============== */
 :root[data-chat-dock="left"] .main-content {
-  margin-left: calc(var(--sidebar-width) + 420px);
+  margin-left: calc(var(--sidebar-width) + var(--chat-panel-width));
   margin-right: 0;
+}
+
+/* =============== Disable transitions during resize drag =============== */
+:root[data-resizing="true"] .main-content,
+:root[data-resizing="true"] .chat-panel {
+  transition: none !important;
 }
 
 /* =============== Bottom Dock =============== */
@@ -1523,7 +1529,7 @@
   }
 
   :root[data-chat-dock="left"] .main-content {
-    margin-left: calc(var(--sidebar-width) + 340px);
+    margin-left: calc(var(--sidebar-width) + var(--chat-panel-width));
   }
 }
 

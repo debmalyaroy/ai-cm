@@ -159,9 +159,9 @@ export interface ChatHistoryMessage {
 }
 
 export const chatAPI = {
-    getSessions: () => fetchAPI<ChatSession[]>('/api/chat/sessions'),
+    getSessions: () => fetchAPI<ChatSession[]>('/api/chat/sessions', { method: 'GET' }),
     getMessages: (sessionId: string) =>
-        fetchAPI<ChatHistoryMessage[]>(`/api/chat/sessions/${sessionId}/messages`),
+        fetchAPI<ChatHistoryMessage[]>(`/api/chat/sessions/${sessionId}/messages`, { method: 'GET' }),
 };
 
 // GraphQL API (for chat operations)
@@ -191,20 +191,47 @@ export interface Action {
     product_name: string;
 }
 
+export interface ActionComment {
+    id: string;
+    comment_text: string;
+    created_by: string;
+    created_at: string;
+}
+
 export const actionsAPI = {
     getActions: (status?: string) =>
         fetchAPI<Action[]>(`/api/actions${status ? `?status=${status}` : ''}`, {
             method: 'GET',
         }),
     approveAction: (id: string) =>
-        fetchAPI<{ message: string }>(`/api/actions/${id}/approve`, { body: '{}' }),
+        fetchAPI<{ message: string }>(`/api/actions/${id}/approve`, { method: 'POST', body: '{}' }),
     rejectAction: (id: string) =>
-        fetchAPI<{ message: string }>(`/api/actions/${id}/reject`, { body: '{}' }),
+        fetchAPI<{ message: string }>(`/api/actions/${id}/reject`, { method: 'POST', body: '{}' }),
+    revertAction: (id: string) =>
+        fetchAPI<{ message: string }>(`/api/actions/${id}/revert`, { method: 'POST', body: '{}' }),
     addAction: (data: Partial<Action>) =>
         fetchAPI<{ message: string; id: string }>('/api/actions', {
+            method: 'POST',
             body: JSON.stringify(data),
         }),
     generateActions: () => fetchAPI<{ message: string }>('/api/actions/generate', { method: 'POST' }),
+    draftAction: (input: string) =>
+        fetchAPI<Partial<Action>>('/api/actions/draft', {
+            method: 'POST',
+            body: JSON.stringify({ input }),
+        }),
+    getComments: (id: string) =>
+        fetchAPI<ActionComment[]>(`/api/actions/${id}/comments`, { method: 'GET' }),
+    addComment: (id: string, text: string) =>
+        fetchAPI<{ message: string; id: string }>(`/api/actions/${id}/comments`, {
+            method: 'POST',
+            body: JSON.stringify({ comment_text: text }),
+        }),
+    updateAction: (id: string, data: { title?: string; description?: string }) =>
+        fetchAPI<{ message: string }>(`/api/actions/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(data),
+        }),
 };
 
 // Alerts API
@@ -226,4 +253,21 @@ export const alertsAPI = {
         fetchAPI<{ message: string }>('/api/alerts', {
             body: JSON.stringify(data),
         }),
+};
+
+// Reports API
+export const reportsAPI = {
+    downloadReport: async () => {
+        const res = await fetch(`${API_BASE}/api/reports/download`, { method: 'GET' });
+        if (!res.ok) throw new Error(`Download error: ${res.status}`);
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = res.headers.get('Content-Disposition')?.split('filename=')[1] || 'report.csv';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    },
 };

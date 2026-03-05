@@ -117,6 +117,25 @@ CREATE TABLE action_log (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE TABLE action_comments (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    action_id UUID REFERENCES action_log(id) ON DELETE CASCADE,
+    user_name VARCHAR(100) DEFAULT 'demo_user',
+    content TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE cron_jobs (
+    id VARCHAR(100) PRIMARY KEY,
+    locked_by VARCHAR(100),
+    locked_at TIMESTAMPTZ,
+    last_run TIMESTAMPTZ,
+    next_run TIMESTAMPTZ,
+    status VARCHAR(20) DEFAULT 'idle',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- AGENT / MEMORY TABLES
 CREATE TABLE agent_sessions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

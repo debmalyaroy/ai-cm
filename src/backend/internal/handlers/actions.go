@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/debmalyaroy/ai-cm/internal/agent"
@@ -19,10 +21,15 @@ func RegisterActionRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, llmClient llm.C
 	actions := rg.Group("/actions")
 	{
 		actions.GET("", getActions(db))
-		actions.POST("", createAction(db)) // Issue 1 Fix: Explicitly save actions
+		actions.POST("", createAction(db))
 		actions.POST("/generate", generateActions(db, recommender))
+		actions.POST("/draft", draftAction(llmClient))
+		actions.PATCH("/:id", updateActionDetails(db))
 		actions.POST("/:id/approve", updateActionStatus(db, "approved"))
 		actions.POST("/:id/reject", updateActionStatus(db, "rejected"))
+		actions.POST("/:id/revert", updateActionStatus(db, "pending"))
+		actions.GET("/:id/comments", getActionComments(db))
+		actions.POST("/:id/comments", addActionComment(db))
 	}
 }
 
@@ -182,18 +189,23 @@ func generateActions(db *pgxpool.Pool, recommender *agent.Recommender) gin.Handl
 			return
 		}
 
-		// Insert generated actions
+		// Insert generated actions (skip duplicates already pending with same title)
 		count := 0
 		for _, s := range suggestions {
-			_, err := db.Exec(c, `
+			result, err := db.Exec(c, `
 				INSERT INTO action_log (id, title, description, action_type, category, confidence_score, status)
-				VALUES ($1, $2, $3, $4, $5, $6, 'pending')
+				SELECT $1, $2, $3, $4, $5, $6, 'pending'
+				WHERE NOT EXISTS (
+					SELECT 1 FROM action_log WHERE title = $2 AND status = 'pending'
+				)
 			`, uuid.New().String(), s.Title, s.Description, s.ActionType, "General", s.Confidence)
 			if err != nil {
 				slog.WarnContext(c.Request.Context(), "Failed to insert generated action", "error", err, "title", s.Title)
 				continue
 			}
-			count++
+			if result.RowsAffected() > 0 {
+				count++
+			}
 		}
 
 		slog.InfoContext(c.Request.Context(), "Successfully generated AI actions", "count", count)
@@ -240,5 +252,198 @@ func updateActionStatus(db *pgxpool.Pool, status string) gin.HandlerFunc {
 			"id":      actionID,
 			"status":  status,
 		})
+	}
+}
+
+// @Summary Draft an action
+// @Description Use the LLM to draft an action from natural language input
+// @Tags actions
+// @Produce json
+// @Param request body map[string]string true "User Input"
+// @Success 200 {object} map[string]interface{}
+// @Failure 500 {object} map[string]string
+// @Router /actions/draft [post]
+func draftAction(llmClient llm.Client) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req struct {
+			Input string `json:"input"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil || req.Input == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid input"})
+			return
+		}
+
+		systemPrompt := `You are an AI assistant helping a Category Manager draft an action.
+Given the user's input, extract and structure it into a JSON object representing the action.
+The action must contain:
+{
+  "title": "Short descriptive title",
+  "description": "Detailed explanation of what needs to be done and why",
+  "action_type": "One of: price_match, restock, promotion, delist, manual_execution",
+  "category": "The product category, or 'General' if not specific",
+  "confidence_score": 0.95
+}
+Return ONLY valid JSON.`
+
+		result, err := llmClient.Generate(c.Request.Context(), systemPrompt, req.Input)
+		if err != nil {
+			slog.ErrorContext(c.Request.Context(), "LLM draft action failed", "error", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to draft action"})
+			return
+		}
+
+		// Try to extract JSON from result
+		clean := result
+		startIdx := strings.Index(clean, "{")
+		endIdx := strings.LastIndex(clean, "}")
+		if startIdx != -1 && endIdx != -1 && endIdx > startIdx {
+			clean = clean[startIdx : endIdx+1]
+		}
+
+		var action map[string]interface{}
+		if err := json.Unmarshal([]byte(clean), &action); err != nil {
+			slog.WarnContext(c.Request.Context(), "Failed to parse LLM JSON, using fallback", "error", err, "raw", result)
+			// Fallback: create a structured action from the raw input
+			action = map[string]interface{}{
+				"title":            req.Input,
+				"description":      result,
+				"action_type":      "manual_execution",
+				"category":         "General",
+				"confidence_score": 0.8,
+			}
+		}
+
+		c.JSON(http.StatusOK, action)
+	}
+}
+
+// @Summary Get action comments
+// @Description Retrieve comments for a specific action
+// @Tags actions
+// @Produce json
+// @Param id path string true "Action ID"
+// @Success 200 {array} map[string]interface{}
+// @Failure 500 {object} map[string]string
+// @Router /actions/{id}/comments [get]
+func getActionComments(db *pgxpool.Pool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		actionID := c.Param("id")
+		rows, err := db.Query(c, `
+			SELECT id, content, user_name, created_at 
+			FROM action_comments 
+			WHERE action_id = $1 
+			ORDER BY created_at ASC
+		`, actionID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer rows.Close()
+
+		type Comment struct {
+			ID        string `json:"id"`
+			Text      string `json:"comment_text"`
+			CreatedBy string `json:"created_by"`
+			CreatedAt string `json:"created_at"`
+		}
+
+		var comments []Comment
+		for rows.Next() {
+			var cm Comment
+			var createdAt time.Time
+			if err := rows.Scan(&cm.ID, &cm.Text, &cm.CreatedBy, &createdAt); err == nil {
+				cm.CreatedAt = createdAt.Format(time.RFC3339)
+				comments = append(comments, cm)
+			}
+		}
+		if comments == nil {
+			comments = []Comment{}
+		}
+		c.JSON(http.StatusOK, comments)
+	}
+}
+
+// @Summary Add action comment
+// @Description Add a new comment to a specific action
+// @Tags actions
+// @Produce json
+// @Param id path string true "Action ID"
+// @Param request body map[string]string true "Comment Text"
+// @Success 200 {object} map[string]interface{}
+// @Failure 500 {object} map[string]string
+// @Router /actions/{id}/comments [post]
+func addActionComment(db *pgxpool.Pool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		actionID := c.Param("id")
+		var req struct {
+			Text string `json:"comment_text"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil || req.Text == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid comment text"})
+			return
+		}
+
+		commentID := uuid.New().String()
+		_, err := db.Exec(c, `
+			INSERT INTO action_comments (id, action_id, content, user_name)
+			VALUES ($1, $2, $3, 'user')
+		`, commentID, actionID, req.Text)
+
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"message": "Comment added", "id": commentID})
+	}
+}
+
+// @Summary Update action details
+// @Description Update the title and description of a pending action
+// @Tags actions
+// @Produce json
+// @Param id path string true "Action ID"
+// @Param request body map[string]string true "Updated fields"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /actions/{id} [patch]
+func updateActionDetails(db *pgxpool.Pool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		actionID := c.Param("id")
+		var req struct {
+			Title       string `json:"title"`
+			Description string `json:"description"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+			return
+		}
+		if req.Title == "" && req.Description == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "at least one of title or description is required"})
+			return
+		}
+
+		slog.DebugContext(c.Request.Context(), "Updating action details", "action_id", actionID)
+		result, err := db.Exec(c, `
+			UPDATE action_log
+			SET title = CASE WHEN $1 <> '' THEN $1 ELSE title END,
+			    description = CASE WHEN $2 <> '' THEN $2 ELSE description END,
+			    updated_at = NOW()
+			WHERE id = $3 AND status = 'pending'
+		`, req.Title, req.Description, actionID)
+		if err != nil {
+			slog.ErrorContext(c.Request.Context(), "Failed to update action details", "error", err, "action_id", actionID)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if result.RowsAffected() == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": "action not found or is not in pending state"})
+			return
+		}
+
+		slog.InfoContext(c.Request.Context(), "Action details updated", "action_id", actionID)
+		c.JSON(http.StatusOK, gin.H{"message": "Action updated"})
 	}
 }

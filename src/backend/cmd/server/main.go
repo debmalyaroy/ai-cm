@@ -13,6 +13,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/debmalyaroy/ai-cm/internal/agent"
+	"github.com/debmalyaroy/ai-cm/internal/cron"
+
 	// _ "github.com/debmalyaroy/ai-cm/docs" // Swagger docs
 	// swaggerFiles "github.com/swaggo/files"
 	// ginSwagger "github.com/swaggo/gin-swagger"
@@ -96,6 +99,30 @@ func main() {
 		slog.Warn("failed to initialize prompts. System prompts may be unavailable.", "error", err)
 	}
 
+	// Initialize Distributed Cron Scheduler
+	nodeID := os.Getenv("POD_NAME")
+	if nodeID == "" {
+		nodeID = fmt.Sprintf("node-%d", time.Now().UnixNano())
+	}
+	scheduler := cron.NewScheduler(db, nodeID)
+
+	watchdogAgent := agent.NewWatchdogAgent(db)
+
+	// Register generic interval anomaly check
+	scheduler.Register(cron.NewIntervalJob("watchdog-anomaly-checks", 5*time.Minute, func(c context.Context) error {
+		_, err := watchdogAgent.Process(c, &agent.Input{Query: "interval-check"})
+		return err
+	}))
+
+	// Register specific time-based alert (e.g., Daily at 8:00 AM)
+	scheduler.Register(cron.NewDailyJob("watchdog-daily-alerts", 8, 0, func(c context.Context) error {
+		_, err := watchdogAgent.Process(c, &agent.Input{Query: "time-based-check"})
+		return err
+	}))
+
+	// Start scheduler
+	scheduler.Start(ctx)
+
 	// Setup Gin router
 	if cfg.Logging.Level != "debug" {
 		gin.SetMode(gin.ReleaseMode)
@@ -168,6 +195,7 @@ func main() {
 		handlers.RegisterChatRoutes(api, db, llmClient, cfg.LLM.AgentModels)
 		handlers.RegisterActionRoutes(api, db, llmClient)
 		handlers.RegisterAlertRoutes(api, db) // Issue 2 Fix: Alert Routes
+		handlers.RegisterReportRoutes(api, db)
 		handlers.RegisterGraphQLRoutes(api, db, llmClient, cfg.LLM.AgentModels)
 	}
 
@@ -196,13 +224,21 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	slog.Info("shutting down server")
-	shutdownCtx, cancel := context.WithTimeout(ctx, time.Duration(cfg.Server.ShutdownSec)*time.Second)
+	slog.Info("shutting down services gracefully...")
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.Server.ShutdownSec)*time.Second)
 	defer cancel()
 
+	// 1. Shutdown API Server
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		slog.Error("server forced shutdown", "error", err)
-		os.Exit(1)
+	} else {
+		slog.Info("server exited cleanly")
 	}
-	slog.Info("server exited")
+
+	// 2. Shutdown Cron Scheduler
+	scheduler.Stop()
+	slog.Info("cron scheduler stopped")
+
+	// 3. Database connection pool is closed via the `defer db.Close()` at the top of main.
+	slog.Info("shutdown complete")
 }

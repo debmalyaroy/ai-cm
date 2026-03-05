@@ -116,49 +116,55 @@ function CardOptionsButton({ cardType, cardData, variant = "menu" }: { cardType:
         setShowMenu(false);
         setShowActions(true);
         setLoadingActions(true);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 45000);
         try {
-            const query = `Fetch the recent performance data for my "${cardType}" metrics. Based on the data returned by the query, provide 3 to 5 recommended actions I should take to improve performance.`;
+            const query = `Fetch the recent performance data for my "${cardType}" metrics. Based on the data returned by the query, provide 3 to 5 recommended actions I should take to improve performance. Format as a numbered list.`;
             const res = await fetch("/api/chat", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ message: query }),
+                signal: controller.signal,
             });
-            const text = await res.text();
-            // Parse SSE response for the action content
-            const lines = text.split("\n");
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+            const reader = res.body?.getReader();
+            const decoder = new TextDecoder();
+            let buffer = "";
             const actionItems: string[] = [];
-            for (const line of lines) {
-                if (line.startsWith("data: ")) {
-                    try {
-                        const data = JSON.parse(line.slice(6));
-                        if (data.content) {
-                            // Extract action items from markdown
-                            const items = data.content.match(/(?:^|\n)\d+\.\s*\*\*(.+?)\*\*/g);
-                            if (items) {
-                                items.forEach((item: string) => {
-                                    const clean = item.replace(/^\n?\d+\.\s*\*\*/, "").replace(/\*\*$/, "");
-                                    actionItems.push(clean);
-                                });
-                            }
-                            if (actionItems.length === 0) {
-                                // Fallback: split by numbered items
-                                data.content.split(/\n/).forEach((l: string) => {
-                                    const m = l.match(/^\d+\.\s+(.+)/);
-                                    if (m) actionItems.push(m[1].replace(/\*\*/g, ""));
-                                });
-                            }
+            let currentEvent = "";
+
+            if (reader) {
+                outer: while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split("\n");
+                    buffer = lines.pop() || "";
+                    for (const line of lines) {
+                        if (line.startsWith("event: ")) {
+                            currentEvent = line.slice(7).trim();
+                        } else if (line.startsWith("data: ")) {
+                            try {
+                                const data = JSON.parse(line.slice(6));
+                                if (currentEvent === "response" && data.content) {
+                                    data.content.split(/\n/).forEach((l: string) => {
+                                        const m = l.match(/^\d+\.\s+(.+)/);
+                                        if (m) actionItems.push(m[1].replace(/\*\*/g, "").trim());
+                                    });
+                                }
+                                if (currentEvent === "done") break outer;
+                            } catch { /* ignore parse errors */ }
                         }
-                    } catch { /* ignore parse errors */ }
+                    }
                 }
             }
-            if (actionItems.length > 0) {
-                setActions(actionItems.slice(0, 5));
-            } else {
-                setActions(["Review pricing strategy", "Check inventory levels", "Analyze competitor activity"]);
-            }
+
+            setActions(actionItems.length > 0 ? actionItems.slice(0, 5) : ["Review pricing strategy", "Check inventory levels", "Analyze competitor activity"]);
         } catch {
             setActions(["Review pricing strategy", "Check inventory levels", "Analyze competitor activity"]);
         } finally {
+            clearTimeout(timeoutId);
             setLoadingActions(false);
         }
     };
@@ -552,6 +558,9 @@ export default function DashboardPage() {
                                     <div><div className="region-stat-label">Margin</div><div className="region-stat-value" style={{ color: marginPct > 30 ? "var(--color-success)" : "var(--color-warning)" }}>{marginPct.toFixed(1)}%</div></div>
                                     <div><div className="region-stat-label">Units</div><div className="region-stat-value">{formatNumber(r.units)}</div></div>
                                     <div><div className="region-stat-label">Avg Discount</div><div className="region-stat-value">{r.avg_discount.toFixed(1)}%</div></div>
+                                </div>
+                                <div style={{ marginTop: 12, borderTop: "1px solid var(--color-border)", paddingTop: 12 }}>
+                                    <CardOptionsButton cardType={`Region ${r.name}`} cardData={r} variant="inline" />
                                 </div>
                             </div>
                         );

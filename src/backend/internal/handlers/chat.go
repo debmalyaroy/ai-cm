@@ -22,8 +22,8 @@ func RegisterChatRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, llmClient llm.Cli
 	supervisor := agent.NewSupervisorAgent(llmClient, db, agentModels)
 
 	rg.POST("/chat", handleChat(db, supervisor, llmClient))
-	rg.POST("/chat/sessions", getChatSessions(db))
-	rg.POST("/chat/sessions/:id/messages", getChatMessages(db))
+	rg.GET("/chat/sessions", getChatSessions(db))
+	rg.GET("/chat/sessions/:id/messages", getChatMessages(db))
 
 	// Admin tool: Force reloading LLM system prompts from disk
 	rg.POST("/prompts/reload", reloadPrompts())
@@ -77,18 +77,19 @@ func handleChat(db *pgxpool.Pool, supervisor *agent.SupervisorAgent, llmClient l
 
 		slog.DebugContext(reqCtx, "Chat: processing message", "session_id", sessionID, "message_len", len(req.Message))
 
-		// Store user message
+		// Store user message and update session timestamp
 		if _, err := db.Exec(reqCtx, "INSERT INTO chat_messages (session_id, role, content) VALUES ($1, $2, $3)",
 			sessionID, "user", req.Message); err != nil {
 			slog.WarnContext(reqCtx, "failed to store user message", "error", err)
 		}
+		db.Exec(reqCtx, "UPDATE chat_sessions SET updated_at = NOW() WHERE id = $1", sessionID)
 
-		// Get chat history for context
+		// Get chat history for context (ASC order so oldest first = correct conversation flow)
 		var history []agent.Message
 		rows, err := db.Query(reqCtx, `
 			SELECT role, content FROM chat_messages
 			WHERE session_id = $1
-			ORDER BY created_at DESC LIMIT 10
+			ORDER BY created_at ASC LIMIT 10
 		`, sessionID)
 		if err == nil {
 			defer rows.Close()
@@ -170,9 +171,13 @@ func handleChat(db *pgxpool.Pool, supervisor *agent.SupervisorAgent, llmClient l
 		suggestions := generateSuggestions(output.AgentName, req.Message, output.Response, llmClient)
 		sendSSE(c.Writer, "suggestions", map[string]interface{}{"questions": suggestions})
 
-		// Store assistant message
+		suggestionsBytes, _ := json.Marshal(suggestions)
+		metadataJSON := fmt.Sprintf(`{"agent": "%s", "suggestions": %s}`, output.AgentName, string(suggestionsBytes))
+
+		// Store assistant message and update session timestamp
 		db.Exec(reqCtx, "INSERT INTO chat_messages (session_id, role, content, metadata) VALUES ($1, $2, $3, $4)",
-			sessionID, "assistant", output.Response, fmt.Sprintf(`{"agent": "%s"}`, output.AgentName))
+			sessionID, "assistant", output.Response, metadataJSON)
+		db.Exec(reqCtx, "UPDATE chat_sessions SET updated_at = NOW() WHERE id = $1", sessionID)
 
 		// Send done event
 		sendSSE(c.Writer, "done", map[string]string{"session_id": sessionID})

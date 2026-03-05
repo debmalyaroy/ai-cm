@@ -96,7 +96,7 @@ func fallbackSuggestions(agentName string) []map[string]interface{} {
 			{"label": "⚡ Build action plan", "type": "action", "value": "Create an action plan to address the key issues identified"},
 			{"label": "📊 Show the data", "type": "question", "value": "Show me the underlying data supporting this insight"},
 			{"label": "📅 3-month trend", "type": "question", "value": "What is the trend over the last 3 months?"},
-			{"label": "🔍 Root cause", "type": "question", "value": "What is the root cause of this issue?"},
+			{"label": "🔔 Create an alert", "type": "action", "value": "Create an alert to monitor this metric"},
 			{"label": "📧 Brief the team", "type": "email", "value": "Draft an email to the team summarising this insight"},
 		}
 	case "planner":
