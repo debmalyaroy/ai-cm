@@ -83,6 +83,7 @@ if [ ! -f "$ENV_FILE" ]; then
     echo "    DATABASE_URL=postgres://aicm:PASSWORD@RDS_ENDPOINT:5432/aicm?sslmode=require"
     echo "    AWS_REGION=us-east-1"
     echo "    NEXT_PUBLIC_API_URL=http://YOUR_ELASTIC_IP"
+    echo "    DOCKER_REGISTRY=your_dockerhub_username"
     echo ""
     echo "  You can create the file with:"
     echo "    cp config/.env.prod config/.env.prod  # edit the template"
@@ -103,7 +104,13 @@ check_var() {
 check_var "DATABASE_URL"
 check_var "AWS_REGION"
 check_var "NEXT_PUBLIC_API_URL"
+check_var "DOCKER_REGISTRY"
+
 echo "  ✓ Environment config validated"
+
+# Hardening: Restrict file permissions so no other OS user can read credentials
+chmod 600 "$ENV_FILE"
+echo "  ✓ Hardened permissions on $ENV_FILE"
 
 # ── Step 5: Deploy ────────────────────────────────────────────────────────────
 echo "[5/5] Building and starting containers (this may take 5-10 minutes)..."

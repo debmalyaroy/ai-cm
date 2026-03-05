@@ -1,0 +1,80 @@
+name: PR Review & Quality Gate
+
+on:
+  pull_request:
+    branches: ["master"]
+
+jobs:
+  backend-checks:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./src/backend
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Important for comparing coverage against base branch
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache-dependency-path: src/backend/go.sum
+
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v4
+        with:
+          version: v1.56.2
+          working-directory: src/backend
+          args: --timeout=5m
+
+      - name: Run Tests & Generate Coverage (Backend)
+        # We explicitly skip e2e tests for PRs as they require a running DB/full stack
+        run: go test -v -coverprofile=coverage.out -covermode=atomic -skip 'E2E|e2e|EndToEnd' ./...
+
+      - name: Process Coverage threshold
+        run: |
+          go tool cover -func=coverage.out > coverage_summary.txt
+          TOTAL_COVERAGE=$(grep total: coverage_summary.txt | grep -Eo '[0-9]+\.[0-9]+')
+          echo "Total Backend Coverage: $TOTAL_COVERAGE%"
+          
+          # Check if coverage is below 80%
+          if (( $(echo "$TOTAL_COVERAGE < 80" | bc -l) )); then
+            echo "::error:: Backend Test coverage ($TOTAL_COVERAGE%) is below the required 80% threshold!"
+            exit 1
+          fi
+          echo "Backend Test coverage ($TOTAL_COVERAGE%) meets the 80% threshold."
+
+  frontend-checks:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./src/apps/web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: ./src/apps/web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint Frontend
+        run: npm run lint
+
+      # Ensure the frontend actually builds (no typescript type errors, etc.)
+      - name: Build Frontend Check
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: 'http://localhost'
+          
+      # Note: We explicitly skip coverage generation/checking for the frontend on PR reviews.

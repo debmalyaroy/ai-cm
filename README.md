@@ -1,6 +1,8 @@
 # AI-CM: The AI Category Manager Copilot
 
-[![CI](https://github.com/debmalyaroy/ai-cm/actions/workflows/ci.yml/badge.svg)](https://github.com/debmalyaroy/ai-cm/actions/workflows/ci.yml)
+[![CI (Master)](https://github.com/debmalyaroy/ai-cm/actions/workflows/ci.yml/badge.svg)](https://github.com/debmalyaroy/ai-cm/actions/workflows/ci.yml)
+[![PR Review](https://github.com/debmalyaroy/ai-cm/actions/workflows/pr_review.yml/badge.svg)](https://github.com/debmalyaroy/ai-cm/actions/workflows/pr_review.yml)
+![Coverage](https://img.shields.io/badge/Coverage-80%25%2B-brightgreen.svg)
 
 > **Transforming Retail Category Management from Reactive Analysis to Proactive Decision Intelligence.**
 
@@ -30,8 +32,7 @@ This repository contains the complete design and implementation roadmap for AI-C
 
 ```bash
 # 1. Configure
-cp config/.env.local config/.env.local.active
-# Edit config/.env.local.active — set your LLM_PROVIDER and API Keys inside
+# Ensure config/.env.local is populated with your LLM_PROVIDER and API Keys
 
 # 2. Run Local Deployment (Linux/Mac)
 ./scripts/deploy_e2e.sh local

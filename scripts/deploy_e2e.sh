@@ -42,10 +42,23 @@ elif [ "$ENV_TARGET" == "prod" ]; then
     fi
 
     pushd "$INFRA_DIR" > /dev/null
-    # Build images from source and start containers.
-    # Note: Next.js build requires ~512MB RAM; ensure the host has swap configured.
-    # See scripts/aws_deploy.sh for swap setup on EC2.
-    docker compose --env-file "$ENV_FILE" -f docker-compose.prod.yml up --build -d
+    
+    # Extract DOCKER_REGISTRY from .env.prod for logic checks
+    source "$ENV_FILE"
+    
+    # ── ECR vs DockerHub Authentication ──
+    if [[ "$DOCKER_REGISTRY" == *".ecr."*".amazonaws.com" ]]; then
+        echo -e "\033[33mDetected AWS ECR Registry. Authenticating via AWS CLI...\033[0m"
+        # Extract region from the ECR URL: 123.dkr.ecr.REGION.amazonaws.com
+        ECR_REGION=$(echo "$DOCKER_REGISTRY" | cut -d'.' -f4)
+        aws ecr get-login-password --region "$ECR_REGION" | docker login --username AWS --password-stdin "$DOCKER_REGISTRY"
+    else
+        echo -e "\033[36mUsing public DockerHub or standard registry ($DOCKER_REGISTRY). No explicit AWS login required.\033[0m"
+    fi
+
+    # Pull pre-built images (CI builds them — no source build on EC2).
+    docker compose --env-file "$ENV_FILE" -f docker-compose.prod.yml pull
+    docker compose --env-file "$ENV_FILE" -f docker-compose.prod.yml up -d --remove-orphans
     popd > /dev/null
 
     echo -e "\033[32m✅ Production deployment complete. App accessible on port 80 (nginx).\033[0m"

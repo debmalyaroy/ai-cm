@@ -2,14 +2,16 @@
 # PostgreSQL is NOT containerised here; it runs on Amazon RDS.
 # DATABASE_URL must be set in config/.env.prod pointing to the RDS endpoint.
 #
+# Images are pre-built by GitHub Actions CI and pushed to DockerHub.
+# DOCKER_REGISTRY must be set in config/.env.prod to your DockerHub username.
+#
 # Usage (from repo root):
 #   ./scripts/deploy_e2e.sh prod
 
 services:
   backend:
-    build:
-      context: ../src/backend
-      dockerfile: ../../infra/Dockerfile.backend
+    # Pull pre-built image from DockerHub (built by CI, not from source on EC2)
+    image: ${DOCKER_REGISTRY}/aicm-backend:latest
     container_name: aicm-backend
     restart: unless-stopped
     environment:
@@ -31,11 +33,8 @@ services:
           memory: 256M
 
   frontend:
-    build:
-      context: ../src/apps/web
-      dockerfile: ../../../infra/Dockerfile.frontend
-      args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost}
+    # Pull pre-built image from DockerHub (NEXT_PUBLIC_API_URL baked in at CI build time)
+    image: ${DOCKER_REGISTRY}/aicm-frontend:latest
     container_name: aicm-frontend
     restart: unless-stopped
     environment:

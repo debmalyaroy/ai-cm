@@ -245,23 +245,21 @@ ai-cm/
 │   │   ├── src/components/     # Shadcn UI
 │   │   └── package.json
 │
-├── backend/                    # Go Backend (Go Workspace)
-│   ├── go.work                 # Go Workspace file
+├── backend/                    # Go Backend
 │   ├── cmd/                    # Entry points
-│   │   ├── gateway/            # main.go for Gateway
-│   │   ├── agent-core/         # main.go for Agent Core
-│   │   └── ingestion/          # main.go for Ingestion
+│   │   └── server/             # main.go
 │   │
 │   ├── internal/               # Private shared code
-│   │   ├── common/             # Loggers, Errors
-│   │   └── proto/              # Generated gRPC stubs (.pb.go)
-│   │
-│   ├── services/
-│   │   ├── auth/               # Auth Service Logic
-│   │   ├── agent/              # Agent Logic (Chains, Tools)
-│   │   └── ingestion/          # Parsing Logic
-│   │
-│   └── pkg/                    # Public libraries (if any)
+│   │   ├── agent/              # Agent Logic (Supervisor, ReAct, RAG)
+│   │   ├── config/             # Configuration parsing
+│   │   ├── cron/               # Distributed scheduler
+│   │   ├── database/           # Postgres connection & models
+│   │   ├── handlers/           # REST API endpoints
+│   │   ├── llm/                # LLM Client implementations
+│   │   ├── logger/             # Structured logging
+│   │   ├── memory/             # Vector storage integration
+│   │   └── prompts/            # Template files
+│   ├── go.mod                  # Go module definition
 │
 ├── ml/                         # Python ML Services
 │   ├── forecasting/

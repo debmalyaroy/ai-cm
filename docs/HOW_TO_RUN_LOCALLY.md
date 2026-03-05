@@ -18,10 +18,10 @@ All commands are written for **Windows PowerShell**. Run everything from the pro
 
 ### With a Cloud LLM (Gemini / OpenAI)
 
-1. Copy the example env file and fill in your API keys:
+1. Ensure your local environment variables are set up:
    ```powershell
-   Copy-Item infra\.env.example infra\.env
-   notepad infra\.env
+   Copy-Item config\.env.local config\.env.local
+   notepad config\.env.local
    ```
 2. Run the stack:
    ```powershell
@@ -81,7 +81,7 @@ go mod tidy
 go run ./cmd/server
 ```
 
-The backend reads `config.yaml` from the working directory. The defaults in `src/backend/config.yaml` point to `localhost:11434` (native Ollama) and `localhost:5432` (Postgres) — no extra env vars needed for a local run.
+The backend reads `config.local.yaml` from `../../config/config.local.yaml` (relative to the `src/backend` working directory). The defaults map to `localhost:11434` (native Ollama) and `localhost:5432` (Postgres) — no extra env vars needed for a basic local run.
 
 To override individual settings without editing the file:
 
@@ -89,6 +89,7 @@ To override individual settings without editing the file:
 $env:DATABASE_URL  = "postgres://aicm:aicm_secret@localhost:5432/aicm?sslmode=disable"
 $env:LLM_PROVIDER  = "local"
 $env:LOCAL_LLM_URL = "http://localhost:11434/api/generate"
+# or set OPENAI_API_KEY, GEMINI_API_KEY etc.
 ```
 
 The API will be available at `http://localhost:8080`.
