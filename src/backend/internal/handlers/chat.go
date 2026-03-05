@@ -43,8 +43,9 @@ func reloadPrompts() gin.HandlerFunc {
 }
 
 type ChatRequest struct {
-	Message   string `json:"message" binding:"required"`
-	SessionID string `json:"session_id"`
+	Message    string `json:"message" binding:"required"`
+	SessionID  string `json:"session_id"`
+	ContextMsg string `json:"context_msg,omitempty"`
 }
 
 // @Summary Handle chat messages
@@ -128,6 +129,12 @@ func handleChat(db *pgxpool.Pool, supervisor *agent.SupervisorAgent, llmClient l
 			History:   history,
 		}
 
+		if req.ContextMsg != "" {
+			// Append the context to the query specifically so the Analyst or Strategist agent has historical tie
+			input.Query = fmt.Sprintf("%s\n\n[Context from previous response: %s]", req.Message, req.ContextMsg)
+			slog.DebugContext(reqCtx, "Chat: appended follow-up context to query")
+		}
+
 		sendSSE(c.Writer, "status", map[string]string{"status": "thinking", "message": "Analyzing your question..."})
 
 		output, err := supervisor.Process(processCtx, input)
@@ -165,9 +172,7 @@ func handleChat(db *pgxpool.Pool, supervisor *agent.SupervisorAgent, llmClient l
 			}
 		}(sessionID, req.Message, output.Response, output.AgentName)
 
-		// Generate and send follow-up suggestions.
-		// generateSuggestions uses its own 30s background context and always returns
-		// a non-empty slice (falls back to static suggestions on LLM failure).
+		// Generate and send follow-up suggestions synchronously after the answer is complete.
 		suggestions := generateSuggestions(output.AgentName, req.Message, output.Response, llmClient)
 		sendSSE(c.Writer, "suggestions", map[string]interface{}{"questions": suggestions})
 

@@ -1,4 +1,4 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
 export async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> {
     const method = options?.method || 'POST';
@@ -88,6 +88,7 @@ export interface ChatSSEEvent {
 export function streamChat(
     message: string,
     sessionId: string | null,
+    contextMsg: string | undefined,
     onEvent: (event: ChatSSEEvent) => void,
     onDone: () => void,
     onError: (err: Error) => void
@@ -97,7 +98,7 @@ export function streamChat(
     fetch(`${API_BASE}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message, session_id: sessionId || '' }),
+        body: JSON.stringify({ message, session_id: sessionId || '', context_msg: contextMsg }),
         signal: controller.signal,
     })
         .then(async (res) => {

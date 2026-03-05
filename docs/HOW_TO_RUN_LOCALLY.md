@@ -94,7 +94,7 @@ $env:LOCAL_LLM_URL = "http://localhost:11434/api/generate"
 
 The API will be available at `http://localhost:8080`.
 
-### 4. Run the Frontend (Next.js)
+### 4. Run the Frontend (Vite + React)
 
 Open a new terminal:
 
@@ -104,7 +104,7 @@ npm install
 npm run dev
 ```
 
-Access the app at `http://localhost:3000`.
+Access the app at `http://localhost:3000` (works automatically for both Native runs and Docker Compose due to Vite configuration).
 
 ---
 

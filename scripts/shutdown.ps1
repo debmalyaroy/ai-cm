@@ -13,14 +13,8 @@ Write-Host "🛑 Stopping AI-CM services..." -ForegroundColor Yellow
 
 Push-Location $InfraDir
 try {
-    # Stop services including Ollama if the local-llm override is present
-    $localLlmFile = Join-Path $InfraDir "docker-compose.local-llm.yml"
-    if (Test-Path $localLlmFile) {
-        docker compose -f docker-compose.yml -f docker-compose.local-llm.yml down --remove-orphans
-    }
-    else {
-        docker compose down --remove-orphans
-    }
+    # Stop application services
+    docker compose down --remove-orphans
 }
 catch {
     Write-Host "⚠️  docker compose down failed: $_" -ForegroundColor Yellow
@@ -42,6 +36,12 @@ $nodeProcs = Get-Process -Name "node" -ErrorAction SilentlyContinue | Where-Obje
 if ($nodeProcs) {
     Write-Host "   Stopping orphan frontend processes..." -ForegroundColor Gray
     $nodeProcs | Stop-Process -Force
+}
+
+$ollamaProcs = Get-Process -Name "ollama" -ErrorAction SilentlyContinue
+if ($ollamaProcs) {
+    Write-Host "   Stopping native Ollama processes..." -ForegroundColor Gray
+    $ollamaProcs | Stop-Process -Force
 }
 
 Write-Host ""

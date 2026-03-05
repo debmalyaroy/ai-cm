@@ -70,16 +70,15 @@ services:
     container_name: aicm-frontend
     restart: unless-stopped
     environment:
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080}
-      INTERNAL_API_URL: http://backend:8080
+      VITE_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080}
     ports:
-      - "${FRONTEND_PORT:-3000}:3000"
+      - "${FRONTEND_PORT:-3000}:80"
     depends_on:
       - backend
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 32M
 
 volumes:
   pgdata:

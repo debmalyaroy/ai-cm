@@ -1,5 +1,3 @@
-"use client";
-
 import { useState, useRef, useEffect, useCallback } from "react";
 import { streamChat, chatAPI, alertsAPI, type ChatSSEEvent, type ChatSession } from "@/lib/api";
 import ReactMarkdown from "react-markdown";
@@ -121,7 +119,7 @@ export default function ChatPanel() {
         return () => window.removeEventListener("aicm-chat", handler);
     }, []);
 
-    const handleSend = useCallback(async (overrideMsg?: string) => {
+    const handleSend = useCallback(async (overrideMsg?: string, overrideContext?: string) => {
         const msgText = overrideMsg || input.trim();
         if (!msgText || isLoading) return;
 
@@ -142,6 +140,7 @@ export default function ChatPanel() {
         abortRef.current = streamChat(
             msgText,
             sessionId,
+            overrideContext,
             (event: ChatSSEEvent) => {
                 switch (event.event) {
                     case "session":
@@ -192,7 +191,7 @@ export default function ChatPanel() {
                 }
             },
             () => { setIsLoading(false); setStatus(""); },
-            (err) => {
+            (err: Error) => {
                 setMessages((prev) =>
                     prev.map((m) =>
                         m.id === assistantId
@@ -267,14 +266,14 @@ export default function ChatPanel() {
     };
 
     // Handle suggestion click — intercept "create alert" action
-    const handleSuggestionClick = (s: SuggestionItem) => {
-        const isCreateAlert = s.type === "action" &&
-            /create.*(an?|the)?\s*alert/i.test(s.value);
+    const handleSuggestionClick = (s: SuggestionItem, parentMsgContent?: string) => {
+        // More robust detection: if it's an action and mentions 'alert', it's the inline form
+        const isCreateAlert = s.type === "action" && /alert/i.test(s.value);
         if (isCreateAlert) {
             setCreateAlertForm({ title: "", message: "", severity: "warning", category: "General" });
             return;
         }
-        handleSend(s.value);
+        handleSend(s.value, parentMsgContent);
     };
 
     const handleSaveAlert = async () => {
@@ -420,7 +419,7 @@ export default function ChatPanel() {
                                             <button
                                                 key={i}
                                                 className={`chat-followup-pill action-${s.type}`}
-                                                onClick={() => handleSuggestionClick(s)}
+                                                onClick={() => handleSuggestionClick(s, msg.content)}
                                             >
                                                 {s.label}
                                             </button>

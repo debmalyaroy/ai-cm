@@ -9,7 +9,7 @@ The AI Category Manager (AI-CM) is structured as a modular Monolith utilizing a 
 ```mermaid
 graph TD
     %% Boundaries
-    subgraph Frontend [Next.js Web Application]
+    subgraph Frontend [Vite + React SPA Server via Nginx]
         UI_Dash[Dashboard & KPI Metrics]
         UI_Chat[Chat Interface & SSE Streaming]
         UI_Actions[Action Center & Approval Workflow]
@@ -72,7 +72,7 @@ graph TD
 
 | Component | Responsibility | Tech Stack |
 | :--- | :--- | :--- |
-| **Next.js Frontend** | Manages UI state, renders Server Components for fast loading, handles SSE parsing. Chat panel is resizable via drag handle; transitions are suppressed during resize via `data-resizing` attribute. CSS animations use `transform: none` (not `translateY(0)`) as final keyframe to avoid creating CSS stacking contexts that would clip `position: fixed` modals. | React, TypeScript, Tailwind |
+| **Vite/React Frontend** | Manages UI state and renders statically compiled client-side React components. Runs purely in browser, served by lightweight Nginx container. Eliminates Node.js memory overhead, drastically reducing base RAM usage. | React, Vite, TypeScript, Tailwind |
 | **Go Handlers** | Serves REST endpoints, validates authentication API keys, executes Rate Limits. | Golang, Gin, pgx |
 | **Supervisor Agent** | Classifies incoming chat intent and routes to specialized worker agents. | LangChain-patterns (Go) |
 | **Analyst Agent** | Converts natural language definitions into structured Postgres SQL metrics. | ReAct pattern (Go) |

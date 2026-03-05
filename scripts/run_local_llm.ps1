@@ -16,9 +16,21 @@ Write-Host ""
 
 Push-Location $InfraDir
 try {
-    # Start all services including Ollama in detached mode
-    Write-Host "Pulling and starting containers..." -ForegroundColor Yellow
-    docker compose -f docker-compose.yml -f docker-compose.local-llm.yml up --build -d
+    # Check if Ollama is running natively
+    Write-Host "Checking for native Ollama process..." -ForegroundColor Yellow
+    $ollamaProc = Get-Process -Name "ollama" -ErrorAction SilentlyContinue
+    if (-not $ollamaProc) {
+        Write-Host "Starting native Ollama..." -ForegroundColor Yellow
+        Start-Process -FilePath "ollama" -ArgumentList "serve" -WindowStyle Hidden
+        Start-Sleep -Seconds 3
+    }
+    else {
+        Write-Host "Ollama is already running natively." -ForegroundColor Green
+    }
+
+    # Start application containers
+    Write-Host "Pulling and starting application containers..." -ForegroundColor Yellow
+    docker compose -f docker-compose.yml up --build -d
 
     # Wait for Ollama to be responsive
     Write-Host "Waiting for Ollama service to start..." -ForegroundColor Yellow
@@ -44,10 +56,10 @@ try {
 
     Write-Host "Downloading Local LLM (llama3.2)... This will take a moment." -ForegroundColor Yellow
     Write-Host "Llama 3.2 provides superior reasoning and Text-to-SQL logic handling over previous models." -ForegroundColor Cyan
-    docker exec aicm-ollama ollama pull llama3.2
+    ollama pull llama3.2
 
     Write-Host "Downloading tinyllama for fast intent classification (Supervisor Agent)..." -ForegroundColor Yellow
-    docker exec aicm-ollama ollama pull tinyllama
+    ollama pull tinyllama
 
 }
 catch {
@@ -63,5 +75,5 @@ Write-Host "   Frontend: http://localhost:3000"
 Write-Host "   Backend:  http://localhost:8080"
 Write-Host "   LLM API:  http://localhost:11434"
 Write-Host ""
-Write-Host "View logs: docker compose -f infra/docker-compose.yml -f infra/docker-compose.local-llm.yml logs -f" -ForegroundColor Cyan
-Write-Host "Stop: docker compose -f infra/docker-compose.yml -f infra/docker-compose.local-llm.yml down" -ForegroundColor Cyan
+Write-Host "View logs: docker compose -f infra/docker-compose.yml logs -f" -ForegroundColor Cyan
+Write-Host "Stop: .\scripts\shutdown.ps1" -ForegroundColor Cyan

@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { Link, useLocation } from "react-router-dom";
 
 const navItems = [
     { href: "/dashboard", label: "Dashboard", icon: "📊" },
@@ -14,7 +13,8 @@ const navItems = [
 ];
 
 export default function Sidebar() {
-    const pathname = usePathname();
+    const location = useLocation();
+    const pathname = location.pathname;
     const [isDark, setIsDark] = useState(true);
     const [collapsed, setCollapsed] = useState(false);
 
@@ -77,7 +77,7 @@ export default function Sidebar() {
                     return (
                         <Link
                             key={item.href}
-                            href={item.href}
+                            to={item.href}
                             className={`sidebar-link ${isActive ? "active" : ""}`}
                             title={collapsed ? item.label : undefined}
                         >

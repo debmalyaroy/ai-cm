@@ -38,15 +38,13 @@ services:
     container_name: aicm-frontend
     restart: unless-stopped
     environment:
-      NODE_ENV: production
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost}
-      INTERNAL_API_URL: ${INTERNAL_API_URL:-http://backend:8080}
+      VITE_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost}
     depends_on:
       - backend
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 32M
 
   nginx:
     image: nginx:alpine
