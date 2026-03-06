@@ -9,11 +9,8 @@ env:
   DOCKER_REGISTRY: ${{ secrets.DOCKER_USERNAME }}
 
 jobs:
-  build-backend:
+  build-and-push:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./src/backend
 
     steps:
       - uses: actions/checkout@v4
@@ -24,10 +21,15 @@ jobs:
           go-version: "1.22"
           cache-dependency-path: src/backend/go.sum
 
-      - name: Install dependencies
-        run: go mod download
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: ./src/apps/web/package-lock.json
 
       - name: Generate Swagger
+        working-directory: ./src/backend
         run: |
           go install github.com/swaggo/swag/cmd/swag@latest
           swag init -g cmd/server/main.go -d . --parseDependency --parseInternal
@@ -38,80 +40,20 @@ jobs:
           version: v1.56.2
           working-directory: src/backend
 
-      - name: Run Tests (excluding e2e)
-        # -skip flag requires Go 1.20+; skips any test whose name matches E2E or e2e. Also generates coverage for README badge processing downstream if needed.
-        run: go test -v -coverprofile=coverage.out -covermode=atomic -skip 'E2E|e2e|EndToEnd' ./...
-
-      - name: Build
-        run: |
-          export CONFIG_PATH=../../config/config.local.yaml
-          go build -v ./cmd/server
-
-  build-frontend:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./src/apps/web
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: "npm"
-          cache-dependency-path: ./src/apps/web/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build Frontend
-        run: npm run build
-        env:
-          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL || 'http://localhost' }}
-
-  push-images:
-    # Only push images on master after both builds pass
-    needs: [build-backend, build-frontend]
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
       - name: Log in to Docker Hub
+        # Only login if pulling/pushing images, the build.sh handles the push logic if -t prod is passed.
+        # But to use GitHub Actions caching effectively, we log in here.
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
-          # Use a DockerHub Access Token (not your password) — create one at:
-          # hub.docker.com → Account Settings → Security → New Access Token
-          password: ${{ secrets.DOCKER_PASSWORD }}
+          password: ${{ secrets.DOCKER_PAT }}
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build & Push Backend Image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./src/backend
-          file: ./infra/Dockerfile.backend
-          push: true
-          tags: |
-            ${{ env.DOCKER_REGISTRY }}/aicm-backend:latest
-            ${{ env.DOCKER_REGISTRY }}/aicm-backend:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build & Push Frontend Image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./src/apps/web
-          file: ./infra/Dockerfile.frontend
-          push: true
-          tags: |
-            ${{ env.DOCKER_REGISTRY }}/aicm-frontend:latest
-            ${{ env.DOCKER_REGISTRY }}/aicm-frontend:${{ github.sha }}
-          build-args: |
-            NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Execute Unified Build & Push
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PAT: ${{ secrets.DOCKER_PAT }}
+          VITE_API_URL: ${{ secrets.VITE_API_URL || 'http://localhost' }}
+        run: |
+          chmod +x ./scripts/build.sh
+          # Run the build script targeting production, which builds and pushes both images
+          ./scripts/build.sh all -t prod

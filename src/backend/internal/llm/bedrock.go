@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -18,6 +19,17 @@ type BedrockClient struct {
 	client      *bedrockruntime.Client
 	model       string
 	temperature float64
+}
+
+// LlamaRequest represents the Meta Llama API format
+type LlamaRequest struct {
+	Prompt      string  `json:"prompt"`
+	Temperature float64 `json:"temperature"`
+	MaxGenLen   int     `json:"max_gen_len"`
+}
+
+type LlamaResponse struct {
+	Generation string `json:"generation"`
 }
 
 // ClaudeMessage represents the Anthropic Messages API format used by Bedrock
@@ -66,20 +78,33 @@ func NewBedrockClient(cfg *cfgpkg.Config) (*BedrockClient, error) {
 }
 
 func (b *BedrockClient) Generate(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
-	req := ClaudeRequest{
-		AnthropicVersion: "bedrock-2023-05-31",
-		MaxTokens:        4096,
-		System:           systemPrompt,
-		Messages: []ClaudeMessage{
-			{
-				Role:    "user",
-				Content: userPrompt,
+	var payload []byte
+	var err error
+
+	if strings.Contains(strings.ToLower(b.model), "llama") {
+		prompt := fmt.Sprintf("<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n%s<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n%s<|eot_id|><|start_header_id|>assistant<|end_header_id|>", systemPrompt, userPrompt)
+		req := LlamaRequest{
+			Prompt:      prompt,
+			Temperature: b.temperature,
+			MaxGenLen:   4096,
+		}
+		payload, err = json.Marshal(req)
+	} else {
+		req := ClaudeRequest{
+			AnthropicVersion: "bedrock-2023-05-31",
+			MaxTokens:        4096,
+			System:           systemPrompt,
+			Messages: []ClaudeMessage{
+				{
+					Role:    "user",
+					Content: userPrompt,
+				},
 			},
-		},
-		Temperature: b.temperature,
+			Temperature: b.temperature,
+		}
+		payload, err = json.Marshal(req)
 	}
 
-	payload, err := json.Marshal(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal request: %v", err)
 	}
@@ -91,6 +116,14 @@ func (b *BedrockClient) Generate(ctx context.Context, systemPrompt, userPrompt s
 	})
 	if err != nil {
 		return "", fmt.Errorf("bedrock invoke failed: %v", err)
+	}
+
+	if strings.Contains(strings.ToLower(b.model), "llama") {
+		var res LlamaResponse
+		if err := json.Unmarshal(output.Body, &res); err != nil {
+			return "", fmt.Errorf("failed to unmarshal Llama response: %v", err)
+		}
+		return res.Generation, nil
 	}
 
 	var res ClaudeResponse
@@ -108,20 +141,35 @@ func (b *BedrockClient) Generate(ctx context.Context, systemPrompt, userPrompt s
 func (b *BedrockClient) GenerateStream(ctx context.Context, systemPrompt, userPrompt string) (<-chan StreamChunk, error) {
 	ch := make(chan StreamChunk)
 
-	req := ClaudeRequest{
-		AnthropicVersion: "bedrock-2023-05-31",
-		MaxTokens:        4096,
-		System:           systemPrompt,
-		Messages: []ClaudeMessage{
-			{
-				Role:    "user",
-				Content: userPrompt,
+	var payload []byte
+	var err error
+
+	isLlama := strings.Contains(strings.ToLower(b.model), "llama")
+
+	if isLlama {
+		prompt := fmt.Sprintf("<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n%s<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n%s<|eot_id|><|start_header_id|>assistant<|end_header_id|>", systemPrompt, userPrompt)
+		req := LlamaRequest{
+			Prompt:      prompt,
+			Temperature: b.temperature,
+			MaxGenLen:   4096,
+		}
+		payload, err = json.Marshal(req)
+	} else {
+		req := ClaudeRequest{
+			AnthropicVersion: "bedrock-2023-05-31",
+			MaxTokens:        4096,
+			System:           systemPrompt,
+			Messages: []ClaudeMessage{
+				{
+					Role:    "user",
+					Content: userPrompt,
+				},
 			},
-		},
-		Temperature: b.temperature,
+			Temperature: b.temperature,
+		}
+		payload, err = json.Marshal(req)
 	}
 
-	payload, err := json.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %v", err)
 	}
@@ -144,21 +192,34 @@ func (b *BedrockClient) GenerateStream(ctx context.Context, systemPrompt, userPr
 		for event := range stream.Events() {
 			switch e := event.(type) {
 			case *types.ResponseStreamMemberChunk:
-				var chunk struct {
-					Type  string `json:"type"`
-					Delta struct {
-						Type string `json:"type"`
-						Text string `json:"text"`
-					} `json:"delta"`
-				}
+				if isLlama {
+					var chunk struct {
+						Generation string `json:"generation"`
+					}
+					if err := json.Unmarshal(e.Value.Bytes, &chunk); err != nil {
+						slog.ErrorContext(ctx, "Bedrock Llama stream decode error", "error", err)
+						continue
+					}
+					if chunk.Generation != "" {
+						ch <- StreamChunk{Content: chunk.Generation, Done: false}
+					}
+				} else {
+					var chunk struct {
+						Type  string `json:"type"`
+						Delta struct {
+							Type string `json:"type"`
+							Text string `json:"text"`
+						} `json:"delta"`
+					}
 
-				if err := json.Unmarshal(e.Value.Bytes, &chunk); err != nil {
-					slog.ErrorContext(ctx, "Bedrock stream decode error", "error", err)
-					continue
-				}
+					if err := json.Unmarshal(e.Value.Bytes, &chunk); err != nil {
+						slog.ErrorContext(ctx, "Bedrock stream decode error", "error", err)
+						continue
+					}
 
-				if chunk.Type == "content_block_delta" && chunk.Delta.Type == "text_delta" {
-					ch <- StreamChunk{Content: chunk.Delta.Text, Done: false}
+					if chunk.Type == "content_block_delta" && chunk.Delta.Type == "text_delta" {
+						ch <- StreamChunk{Content: chunk.Delta.Text, Done: false}
+					}
 				}
 			case *types.UnknownUnionMember:
 				slog.WarnContext(ctx, "Unknown stream event type", "event_type", event)

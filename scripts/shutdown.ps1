@@ -11,16 +11,14 @@ $InfraDir = Join-Path $RootDir "infra"
 
 Write-Host "🛑 Stopping AI-CM services..." -ForegroundColor Yellow
 
-Push-Location $InfraDir
 try {
-    # Stop application services
-    docker compose down --remove-orphans
-}
-catch {
-    Write-Host "⚠️  docker compose down failed: $_" -ForegroundColor Yellow
-}
-finally {
-    Pop-Location
+    # Force stop and remove all AI-CM containers explicitly
+    $containers = @("aicm-frontend", "aicm-backend", "aicm-ollama", "aicm-postgres")
+    foreach ($c in $containers) {
+        docker rm -f $c 2>$null
+    }
+} catch {
+    # Containers may not be running; that is fine
 }
 
 # Kill any orphan backend/frontend processes

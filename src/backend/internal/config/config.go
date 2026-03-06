@@ -77,6 +77,13 @@ func Load(path string) *Config {
 	}
 
 	// Env overrides (secrets + runtime)
+	if v := os.Getenv("DATABASE_URL"); v != "" {
+		cfg.Database.URL = v
+	} else {
+		// Expand any environment variables in the URL from the YAML file (e.g. ${POSTGRES_USER})
+		cfg.Database.URL = os.ExpandEnv(cfg.Database.URL)
+	}
+
 	if v := os.Getenv("PORT"); v != "" {
 		if p, err := strconv.Atoi(v); err == nil {
 			cfg.Server.Port = p

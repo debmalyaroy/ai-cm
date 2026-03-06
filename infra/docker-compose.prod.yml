@@ -1,44 +1,37 @@
 # Production docker-compose — EC2 + RDS deployment.
 # PostgreSQL is NOT containerised here; it runs on Amazon RDS.
-# DATABASE_URL must be set in config/.env.prod pointing to the RDS endpoint.
+# Secrets and parameters are injected at runtime via scripts/deploy.sh
 #
-# Images are pre-built by GitHub Actions CI and pushed to DockerHub.
-# DOCKER_REGISTRY must be set in config/.env.prod to your DockerHub username.
+# Images are pre-built and pushed to DockerHub (via Github CI or scripts/build.sh)
 #
-# Usage (from repo root):
-#   ./scripts/deploy_e2e.sh prod
+# Usage (triggered by scripts/deploy.sh):
+#   docker-compose -f infra/docker-compose.prod.yml up -d
 
 services:
   backend:
-    # Pull pre-built image from DockerHub (built by CI, not from source on EC2)
     image: ${DOCKER_REGISTRY}/aicm-backend:latest
     container_name: aicm-backend
     restart: unless-stopped
     environment:
-      # DATABASE_URL env var overrides the placeholder in config.prod.yaml
-      DATABASE_URL: ${DATABASE_URL}
-      LLM_PROVIDER: "aws"
-      AWS_REGION: ${AWS_REGION:-us-east-1}
-      # Bedrock fallback model (agent_models in config.prod.yaml take precedence)
-      AWS_BEDROCK_MODEL: ${AWS_BEDROCK_MODEL:-anthropic.claude-3-haiku-20240307-v1:0}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
       PROMPT_DIR: "/app/prompts"
-      LOG_LEVEL: ${LOG_LEVEL:-info}
+      CONFIG_PATH: "/app/config.yaml"
     volumes:
-      # Mount the prod config as /app/config.yaml (CONFIG_PATH default in main.go)
       - ../config/config.prod.yaml:/app/config.yaml:ro
       - ../src/prompts:/app/prompts:ro
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 512M
 
   frontend:
-    # Pull pre-built image from DockerHub (NEXT_PUBLIC_API_URL baked in at CI build time)
     image: ${DOCKER_REGISTRY}/aicm-frontend:latest
     container_name: aicm-frontend
     restart: unless-stopped
     environment:
-      VITE_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost}
+      VITE_API_URL: ${VITE_API_URL:-http://localhost}
     depends_on:
       - backend
     deploy:

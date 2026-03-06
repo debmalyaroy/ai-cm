@@ -1,33 +1,82 @@
-version: '3.8'
-
 services:
-  ollama:
-    image: ollama/ollama:latest
-    container_name: aicm-ollama
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: aicm-postgres
     restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-aicm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aicm_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-aicm}
     ports:
-      - "11434:11434"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
-      - ollama_data:/root/.ollama
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aicm"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   backend:
+    build:
+      context: ../src/backend
+      dockerfile: ../../infra/Dockerfile.backend
+    container_name: aicm-backend
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-aicm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aicm_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-aicm}
+      PROMPT_DIR: "/app/prompts"
+      CONFIG_PATH: "/app/config.yaml"
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    volumes:
+      - ../src/prompts:/app/prompts:ro
+      - ../config/config.local.llm.yaml:/app/config.yaml:ro
     depends_on:
       postgres:
         condition: service_healthy
       ollama:
         condition: service_started
+    healthcheck:
+      test: ["CMD", "/app/server", "--health-check"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  frontend:
+    build:
+      context: ../src/apps/web
+      dockerfile: ../../../infra/Dockerfile.frontend
+    container_name: aicm-frontend
+    restart: unless-stopped
     environment:
-      - LLM_PROVIDER=local
-      - LOCAL_LLM_URL=http://ollama:11434/api/generate
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:8080}
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      - backend
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: aicm-ollama
+    restart: unless-stopped
     volumes:
-      - ../config/config.local.yaml:/app/config.local.yaml
+      - ollama_data:/root/.ollama
+    # Grant full NVIDIA GPU access to Ollama.
+    # Requires: NVIDIA Game Ready Driver >= 472 on Windows host,
+    # Docker Desktop with WSL2 backend, and NVIDIA Container Toolkit in WSL2.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
 
 volumes:
+  pgdata:
   ollama_data:

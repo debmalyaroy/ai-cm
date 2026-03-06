@@ -12,16 +12,10 @@ INFRA_DIR="$ROOT_DIR/infra"
 
 echo -e "\033[33m🛑 Stopping AI-CM services...\033[0m"
 
-pushd "$INFRA_DIR" > /dev/null
-
-# Stop services including Ollama if the local-llm override is present
-if [ -f "docker-compose.local-llm.yml" ]; then
-    docker compose -f docker-compose.yml -f docker-compose.local-llm.yml down --remove-orphans || echo -e "\033[33m⚠️  docker compose down failed\033[0m"
-else
-    docker compose down --remove-orphans || echo -e "\033[33m⚠️  docker compose down failed\033[0m"
-fi
-
-popd > /dev/null
+# Force stop and remove all AI-CM containers regardless of which compose file was used
+for container in aicm-frontend aicm-backend aicm-ollama aicm-postgres; do
+    docker rm -f "$container" >/dev/null 2>&1 || true
+done
 
 # Kill any orphan backend/frontend processes
 if pgrep -x "server" > /dev/null; then

@@ -17,10 +17,6 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-    deploy:
-      resources:
-        limits:
-          memory: 512M
 
   backend:
     build:
@@ -29,26 +25,18 @@ services:
     container_name: aicm-backend
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-aicm}:${POSTGRES_PASSWORD:-aicm_secret}@postgres:5432/${POSTGRES_DB:-aicm}?sslmode=disable
-      LLM_PROVIDER: ${LLM_PROVIDER:-gemini}
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.0-flash}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
-      AWS_REGION: ${AWS_REGION:-us-east-1}
-      AWS_BEDROCK_MODEL: ${AWS_BEDROCK_MODEL:-anthropic.claude-3-haiku-20240307-v1:0}
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
-      LOCAL_LLM_URL: ${LOCAL_LLM_URL:-http://ollama:11434/api/generate}
-      LOCAL_LLM_MODEL: ${LOCAL_LLM_MODEL:-llama3}
-      PORT: "8080"
+      POSTGRES_USER: ${POSTGRES_USER:-aicm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aicm_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-aicm}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       PROMPT_DIR: "/app/prompts"
-      CONFIG_PATH: "/app/config.local.yaml"
+      CONFIG_PATH: "/app/config.yaml"
     ports:
       - "${BACKEND_PORT:-8080}:8080"
     volumes:
-      - ../src/prompts:/app/prompts
-      - ../config/config.local.yaml:/app/config.local.yaml
+      - ../src/prompts:/app/prompts:ro
+      - ../config/config.local.bedrock.yaml:/app/config.yaml:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -58,10 +46,6 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
-    deploy:
-      resources:
-        limits:
-          memory: 256M
 
   frontend:
     build:
@@ -70,15 +54,11 @@ services:
     container_name: aicm-frontend
     restart: unless-stopped
     environment:
-      VITE_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080}
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:8080}
     ports:
-      - "${FRONTEND_PORT:-3000}:80"
+      - "${FRONTEND_PORT:-3000}:3000"
     depends_on:
       - backend
-    deploy:
-      resources:
-        limits:
-          memory: 32M
 
 volumes:
   pgdata:

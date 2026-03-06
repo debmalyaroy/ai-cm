@@ -1,0 +1,41 @@
+# =============================================================================
+# AI-CM: WSL2 Configuration Template
+# =============================================================================
+# Copy this file to C:\Users\<YourUsername>\.wslconfig
+# Then restart WSL: wsl --shutdown
+#
+# These settings ensure WSL2 has enough memory for Docker + local LLMs
+# and that GPU passthrough is functional for the Ollama container.
+# =============================================================================
+
+[wsl2]
+# Memory for WSL2 (and Docker Desktop). 16GB recommended for llama3.2 (8B).
+# llama3.2 (3B) + tinyllama fit in ~8GB. Increase if you have >=32GB system RAM.
+memory=16GB
+
+# Number of virtual CPUs. Leave 2+ cores for Windows. E.g., 8-core CPU -> 6 here.
+processors=8
+
+# Swap file on disk for overflow (protects against OOM if VRAM spills to RAM).
+swap=8GB
+
+# --- GPU Passthrough Notes ---
+# NVIDIA GPU access in WSL2 does NOT require any .wslconfig GPU settings.
+# GPU passthrough is automatic via the Windows NVIDIA driver (>= 472.x).
+# Steps to enable GPU in Docker:
+#   1. Install NVIDIA Game Ready Driver >= 472 on Windows
+#   2. Docker Desktop -> Settings -> General -> "Use the WSL 2 based engine"
+#   3. The ollama service in docker-compose.local-llm.yml declares:
+#        deploy.resources.reservations.devices:
+#          - driver: nvidia
+#            count: all
+#            capabilities: [gpu]
+#   4. Run: .\scripts\run.ps1 -Profile local_llm
+#      Ollama will automatically use the GPU.
+# Verify inside the container: docker exec aicm-ollama nvidia-smi
+
+[experimental]
+# Improves WSL2 + Docker Desktop networking
+hostAddressLoopback=true
+# Gradually release memory back to Windows when WSL2 is idle
+autoMemoryReclaim=gradual

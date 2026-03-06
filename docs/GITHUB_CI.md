@@ -115,7 +115,7 @@ Go to **GitHub → your repo → Settings → Secrets and variables → Actions 
 | Secret | Value | Notes |
 |---|---|---|
 | `DOCKER_USERNAME` | Your DockerHub username | e.g., `debmalyaroy` |
-| `DOCKER_PASSWORD` | DockerHub **Access Token** | See below — do NOT use your login password |
+| `DOCKER_PAT` | DockerHub **Personal Access Token** | See below — do NOT use your login password |
 | `NEXT_PUBLIC_API_URL` | Public URL of your app | e.g., `http://your-elastic-ip` or `https://yourdomain.com` |
 | `AWS_EC2_HOST` | EC2 Elastic IP or hostname | e.g., `54.123.45.67` |
 | `AWS_EC2_USER` | SSH username | `ec2-user` (Amazon Linux) or `ubuntu` (Ubuntu) |
@@ -130,7 +130,7 @@ Using an access token (instead of your password) is **more secure** — it can b
 3. Go to **Security → Access Tokens → New Access Token**
 4. Name it `github-actions-aicm`, set permissions to **Read & Write**
 5. Copy the token — it is shown **only once**
-6. Paste it as the `DOCKER_PASSWORD` GitHub secret
+6. Paste it as the `DOCKER_PAT` GitHub secret (note: the secret name is `DOCKER_PAT`, not `DOCKER_PASSWORD`)
 
 ### How to get your SSH private key for `AWS_SSH_PRIVATE_KEY`
 
@@ -158,6 +158,117 @@ Separating them means:
 
 ---
 
+## Docker Login — How It Works End-to-End
+
+The CI pipeline logs into DockerHub in two places:
+
+### 1. GitHub Actions (CI workflow — `.github/workflows/ci.yml`)
+The workflow uses the official `docker/login-action` before building images:
+```yaml
+- name: Log in to Docker Hub
+  uses: docker/login-action@v3
+  with:
+    username: ${{ secrets.DOCKER_USERNAME }}
+    password: ${{ secrets.DOCKER_PAT }}
+```
+This is the primary login in CI. The `build.sh all -t prod` script then pushes the images.
+
+### 2. Local build with `-Target prod`
+When you run `.\scripts\build.ps1 all -Target prod` locally, the script reads `DOCKER_PAT`
+(or `DOCKER_PASSWORD` as fallback) from the root `.env` `[prod.aws]` section and calls
+`docker login` automatically before pushing.
+
+### Configuring `DOCKER_PAT` in GitHub Secrets
+
+1. Create a DockerHub PAT (see **"How to create a DockerHub Access Token"** section above).
+2. Go to your repo → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**.
+3. Add each secret from the table below:
+
+| Secret Name | Value |
+|---|---|
+| `DOCKER_USERNAME` | Your DockerHub username (e.g., `debmalyaroy`) |
+| `DOCKER_PAT` | The PAT generated from DockerHub (starts with `dckr_pat_`) |
+| `NEXT_PUBLIC_API_URL` | Public URL of your deployed app (e.g., `http://your-elastic-ip`) |
+| `AWS_EC2_HOST` | EC2 Elastic IP or hostname |
+| `AWS_EC2_USER` | `ec2-user` (Amazon Linux) or `ubuntu` (Ubuntu) |
+| `AWS_SSH_PRIVATE_KEY` | Full contents of your `.pem` key file |
+
+> **Security note**: Always use a PAT — never your DockerHub account password. PATs can be
+> scoped to Read & Write only and revoked independently without changing your password.
+
+---
+
+---
+
+## AWS IAM Policies
+
+Three IAM identities are needed to deploy AI-CM to AWS.
+
+### 1. EC2 Instance Role (for Bedrock access at runtime)
+
+The EC2 instance that runs the containers needs this **IAM Role** attached so the backend can call Bedrock without storing credentials on the server:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:InvokeModel",
+        "bedrock:InvokeModelWithResponseStream"
+      ],
+      "Resource": [
+        "arn:aws:bedrock:*::foundation-model/*",
+        "arn:aws:bedrock:*:*:inference-profile/*"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "aws-marketplace:ViewSubscriptions",
+        "aws-marketplace:Subscribe"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+Create in IAM → Roles → Create role → AWS service → EC2, then attach this policy and assign the role to your EC2 instance.
+
+### 2. CI/CD GitHub Actions User (for DockerHub push only)
+
+The GitHub Actions CI workflow only needs DockerHub credentials — **no AWS permissions**. These are stored as GitHub secrets (`DOCKER_USERNAME`, `DOCKER_PAT`).
+
+The deploy workflow SSHs into EC2 and runs `docker compose pull` + `up`. No AWS API calls are made by the workflow itself.
+
+### 3. EC2 Start/Stop User (optional, for the `aws_startstop` script)
+
+If you use `scripts/aws_startstop.sh` or `.ps1` locally to start/stop the instance to save costs, that user needs:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ec2:StartInstances",
+        "ec2:StopInstances",
+        "ec2:DescribeInstanceStatus",
+        "rds:StartDBInstance",
+        "rds:StopDBInstance",
+        "rds:DescribeDBInstances"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+Store `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` for this user in the `[prod.aws]` section of your root `.env`.
+
 ## Running Manually
 
 ### Trigger CI manually
@@ -176,7 +287,7 @@ Separating them means:
 | Symptom | Likely Cause | Fix |
 |---|---|---|
 | CI not running on push | Branch mismatch | Ensure you're pushing to `master`, not `main` |
-| `DOCKER_PASSWORD` auth failure | Wrong secret or expired token | Regenerate DockerHub Access Token and update the secret |
+| `DOCKER_PAT` auth failure | Wrong secret or expired token | Regenerate DockerHub Access Token, update the `DOCKER_PAT` GitHub secret |
 | `swag: command not found` | PATH issue | swag is installed with `go install` — check Go bin in PATH |
 | `golangci-lint` version mismatch | Old action version | The workflow pins `v1.56.2` — update if lint config changes |
 | Frontend build OOM in CI | Large Next.js app | GitHub Actions runners have 7GB RAM — should not be an issue |

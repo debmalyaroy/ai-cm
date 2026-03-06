@@ -7,16 +7,16 @@
     Prerequisites:
     - AWS CLI v2 installed: winget install Amazon.AWSCLI
     - Configured: aws configure  (or use IAM Identity Center)
-    - EC2_INSTANCE_ID and RDS_INSTANCE_ID set in config/.env.prod or passed directly
+    - EC2_INSTANCE_ID and RDS_INSTANCE_ID set in [prod.aws] section of root .env
 
 .PARAMETER Action
     start | stop | status
 
 .PARAMETER EC2InstanceId
-    Override EC2 instance ID (or set EC2_INSTANCE_ID in config/.env.prod)
+    Override EC2 instance ID (or set EC2_INSTANCE_ID in [prod.aws] of root .env)
 
 .PARAMETER RdsInstanceId
-    Override RDS instance ID (or set RDS_INSTANCE_ID in config/.env.prod)
+    Override RDS instance ID (or set RDS_INSTANCE_ID in [prod.aws] of root .env)
 
 .PARAMETER Region
     AWS region (default: us-east-1)
@@ -39,12 +39,20 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# ── Load IDs from config/.env.prod ───────────────────────────────────────────
-$EnvFile = Join-Path $PSScriptRoot "..\config\.env.prod"
+# ── Load IDs from [prod.aws] section of root .env ────────────────────────────
+$RootDir = Split-Path -Parent $PSScriptRoot
+$EnvFile = Join-Path $RootDir ".env"
+
 if (Test-Path $EnvFile) {
+    $inSection = $false
     Get-Content $EnvFile | ForEach-Object {
-        if ($_ -match '^([A-Z_]+)=(.+)$') {
-            $key = $Matches[1]; $val = $Matches[2].Trim()
+        $line = $_.Trim()
+        if ($line -match "^\[(.*)\]$") {
+            $inSection = ($Matches[1] -eq "prod.aws")
+        }
+        elseif ($inSection -and $line -match "^([^#=]+)=(.*)$") {
+            $key = $Matches[1].Trim()
+            $val = ($Matches[2] -replace "\s*#.*$","").Trim().Trim('"').Trim("'")
             if ($key -eq "EC2_INSTANCE_ID" -and $EC2InstanceId -eq "") { $EC2InstanceId = $val }
             if ($key -eq "RDS_INSTANCE_ID" -and $RdsInstanceId -eq "") { $RdsInstanceId = $val }
             if ($key -eq "AWS_REGION"      -and $Region -eq "")        { $Region = $val }
@@ -54,8 +62,8 @@ if (Test-Path $EnvFile) {
 if ($Region -eq "") { $Region = "us-east-1" }
 
 if ($EC2InstanceId -eq "" -or $RdsInstanceId -eq "") {
-    Write-Host "❌ EC2_INSTANCE_ID and RDS_INSTANCE_ID must be set." -ForegroundColor Red
-    Write-Host "   Add them to config/.env.prod:"
+    Write-Host "ERROR: EC2_INSTANCE_ID and RDS_INSTANCE_ID must be set." -ForegroundColor Red
+    Write-Host "   Add them to the [prod.aws] section of your root .env file:"
     Write-Host "     EC2_INSTANCE_ID=i-0123456789abcdef0"
     Write-Host "     RDS_INSTANCE_ID=aicm-postgres"
     exit 1
@@ -93,7 +101,7 @@ switch ($Action) {
 
 # ── START ─────────────────────────────────────────────────────────────────────
 "start" {
-    Write-Host "🟢 Starting RDS instance: $RdsInstanceId..." -ForegroundColor Green
+    Write-Host "Starting RDS instance: $RdsInstanceId..." -ForegroundColor Green
     $rdsState = Get-RDSState
     if ($rdsState -eq "available") {
         Write-Host "   RDS is already running."
@@ -101,12 +109,12 @@ switch ($Action) {
         aws rds start-db-instance --db-instance-identifier $RdsInstanceId --region $Region | Out-Null
         Write-Host "   Waiting for RDS to become available (may take 2-4 min)..."
         aws rds wait db-instance-available --db-instance-identifier $RdsInstanceId --region $Region
-        Write-Host "   ✓ RDS is available." -ForegroundColor Green
+        Write-Host "   RDS is available." -ForegroundColor Green
     } else {
         Write-Host "   RDS state is '$rdsState' — cannot start. Check AWS Console." -ForegroundColor Yellow
     }
 
-    Write-Host "🟢 Starting EC2 instance: $EC2InstanceId..." -ForegroundColor Green
+    Write-Host "Starting EC2 instance: $EC2InstanceId..." -ForegroundColor Green
     $ec2State = Get-EC2State
     if ($ec2State -eq "running") {
         Write-Host "   EC2 is already running."
@@ -114,7 +122,7 @@ switch ($Action) {
         aws ec2 start-instances --instance-ids $EC2InstanceId --region $Region | Out-Null
         Write-Host "   Waiting for EC2 to reach running state..."
         aws ec2 wait instance-running --instance-ids $EC2InstanceId --region $Region
-        Write-Host "   ✓ EC2 is running." -ForegroundColor Green
+        Write-Host "   EC2 is running." -ForegroundColor Green
     } else {
         Write-Host "   EC2 state is '$ec2State' — cannot start. Check AWS Console." -ForegroundColor Yellow
     }
@@ -125,17 +133,17 @@ switch ($Action) {
         --output text 2>$null
 
     Write-Host ""
-    Write-Host "✅ Services started." -ForegroundColor Green
+    Write-Host "Services started." -ForegroundColor Green
     Write-Host "   App URL: http://$publicIP"
     Write-Host "   SSH:     ssh -i your-key.pem ec2-user@$publicIP"
     Write-Host ""
-    Write-Host "⚠️  Stop services when not in use to stay within Free Tier:" -ForegroundColor Yellow
+    Write-Host "WARNING: Stop services when not in use to stay within Free Tier:" -ForegroundColor Yellow
     Write-Host "   .\scripts\aws_startstop.ps1 stop"
 }
 
 # ── STOP ──────────────────────────────────────────────────────────────────────
 "stop" {
-    Write-Host "🔴 Stopping EC2 instance: $EC2InstanceId..." -ForegroundColor Red
+    Write-Host "Stopping EC2 instance: $EC2InstanceId..." -ForegroundColor Red
     $ec2State = Get-EC2State
     if ($ec2State -eq "stopped") {
         Write-Host "   EC2 is already stopped."
@@ -143,25 +151,25 @@ switch ($Action) {
         aws ec2 stop-instances --instance-ids $EC2InstanceId --region $Region | Out-Null
         Write-Host "   Waiting for EC2 to stop..."
         aws ec2 wait instance-stopped --instance-ids $EC2InstanceId --region $Region
-        Write-Host "   ✓ EC2 stopped." -ForegroundColor Green
+        Write-Host "   EC2 stopped." -ForegroundColor Green
     } else {
         Write-Host "   EC2 state is '$ec2State' — may not be stoppable right now." -ForegroundColor Yellow
     }
 
-    Write-Host "🔴 Stopping RDS instance: $RdsInstanceId..." -ForegroundColor Red
+    Write-Host "Stopping RDS instance: $RdsInstanceId..." -ForegroundColor Red
     $rdsState = Get-RDSState
     if ($rdsState -eq "stopped") {
         Write-Host "   RDS is already stopped."
     } elseif ($rdsState -eq "available") {
         aws rds stop-db-instance --db-instance-identifier $RdsInstanceId --region $Region | Out-Null
         Write-Host "   RDS stop initiated (no need to wait)."
-        Write-Host "   ✓ RDS stopping." -ForegroundColor Green
+        Write-Host "   RDS stopping." -ForegroundColor Green
     } else {
         Write-Host "   RDS state is '$rdsState' — cannot stop right now." -ForegroundColor Yellow
     }
 
     Write-Host ""
-    Write-Host "✅ Stop commands issued." -ForegroundColor Green
+    Write-Host "Stop commands issued." -ForegroundColor Green
     Write-Host "   EC2 and RDS are not billed while stopped."
     Write-Host "   Note: AWS auto-starts RDS after 7 days (AWS limitation)." -ForegroundColor Yellow
 }

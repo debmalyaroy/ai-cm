@@ -1,0 +1,39 @@
+# AI-CM Backend Configuration - LOCAL (AWS Bedrock)
+# Secrets should be provided via environment variables (injected by run.ps1/sh from root .env [local.aws])
+
+server:
+  port: 8080
+  read_timeout_sec: 30
+  write_timeout_sec: 300
+  shutdown_sec: 5
+
+database:
+  url: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-aicm}?sslmode=disable" # Overwritten by ENV if starting normally, else expanded
+  max_conns: 10
+  min_conns: 2
+  max_conn_life_sec: 3600
+
+llm:
+  provider: "aws"
+  temperature: 0.0
+  aws_region: "us-east-1"
+  aws_model: "us.meta.llama3-1-70b-instruct-v1:0"
+  agents:
+    supervisor: "us.meta.llama3-1-70b-instruct-v1:0"
+    analyst: "us.meta.llama3-1-70b-instruct-v1:0"
+    strategist: "us.meta.llama3-1-70b-instruct-v1:0"
+    planner: "us.meta.llama3-1-70b-instruct-v1:0"
+    liaison: "us.meta.llama3-1-70b-instruct-v1:0"
+    watchdog: "us.meta.llama3-1-70b-instruct-v1:0"
+
+logging:
+  level: "debug"
+  format: "text"
+
+security:
+  rate_limit_enabled: false
+
+cors:
+  allow_origins:
+    - "http://localhost:3000"
+    - "http://localhost:3001"

@@ -28,17 +28,21 @@ This repository contains the complete design and implementation roadmap for AI-C
 
 ## 🚀 Quick Start (E2E Wrapper)
 
-**Prerequisites:** Docker, Docker Compose, and a Gemini or OpenAI API key.
+**Prerequisites:** Docker, Docker Compose. For LLM: either a local NVIDIA GPU (for Ollama) or an AWS Bedrock IAM credential.
 
 ```bash
 # 1. Configure
-# Ensure config/.env.local is populated with your LLM_PROVIDER and API Keys
+# Copy .env.example to .env and fill in your keys (AWS Bedrock or Local Postgres)
+cp .env.example .env
 
 # 2. Run Local Deployment (Linux/Mac)
-./scripts/deploy_e2e.sh local
+# To use Local LLM (Ollama)
+./scripts/run.sh -p local_llm
+# To use AWS Bedrock
+./scripts/run.sh -p bedrock
 
 # 2. Run Local Deployment (Windows PowerShell)
-.\scripts\deploy_e2e.ps1 -EnvTarget local
+.\scripts\run.ps1 -Profile local_llm # or bedrock
 
 # 3. Stop running services gracefully
 ./scripts/shutdown.sh # Linux/Mac
@@ -48,31 +52,60 @@ This repository contains the complete design and implementation roadmap for AI-C
 **What starts:**
 | Service | URL | Description |
 |---------|-----|-------------|
-| Frontend | http://localhost:3000 | Next.js Dashboard + Chat |
+| Frontend | http://localhost:3000 | Vite/React Dashboard + Chat |
 | Backend | http://localhost:8080 | Go API (Gin) |
 | PostgreSQL | localhost:5432 | pgvector DB (~157K+ rows seeded) |
+| Ollama (if local_llm) | localhost:11434 | Local LLM Engine |
 
 **Run backend unit tests:**
 ```bash
-cd src/backend && go test ./...
+# Linux/Mac
+cd src/backend && go test ./internal/... -count=1
+
+# Windows
+.scriptsuild.ps1 backend
 ```
 
-**Run E2E tests (local only — requires running Postgres and Ollama):**
+**Run E2E tests (local only):**
+Ensure the `local_llm` stack is running, then:
 ```bash
 # Windows
-.\scripts\run_e2e.ps1
+.\scripts\test_e2e.ps1
 
 # Linux/Mac
-./scripts/run_e2e.sh
+./scripts/test_e2e.sh
 ```
 
-> ⚠️ **E2E tests are NOT run in CI** because they require a live PostgreSQL instance and a local Ollama LLM server. Run them manually after starting the stack with `run_local_llm.ps1`.
+> ⚠️ **E2E tests are NOT run in CI** because they require a live PostgreSQL instance and a local Ollama LLM server. Run them manually via the `test_e2e` scripts.
+
+---
+
+**Build and push production Docker images to DockerHub:**
+```bash
+# Linux/Mac
+./scripts/build.sh all -t prod
+
+# Windows PowerShell
+.\scripts\build.ps1 all -Target prod
+```
+
+Requires `DOCKER_USERNAME` and `DOCKER_PAT` set in the `[prod.aws]` section of your root `.env`. See [HOW_TO_RUN_LOCALLY.md](docs/HOW_TO_RUN_LOCALLY.md) for full details.
+
+**View container logs:**
+```bash
+# Tail logs for a specific service
+docker logs -f aicm-backend
+docker logs -f aicm-frontend
+
+# All services (local_llm profile)
+docker compose -f infra/docker-compose.local-llm.yml logs -f
+```
 
 ---
 
 ## ⚙️ Configuration Definitions
 
-The application utilizes centralized configurations stored in `config/config.local.yaml` (for local dev) and `config/config.prod.yaml` (for deployed production). Secrets and contextual overrides reside in `.env.local` / `.env.prod`.
+The application uses centralized config files in `config/config.local.llm.yaml` (local Ollama dev), `config/config.local.bedrock.yaml` (local Bedrock dev), and `config/config.prod.yaml` (production). Secrets and runtime overrides reside in the root `.env` file, organized by profile sections: `[local.local]`, `[local.aws]`, and `[prod.aws]`.
 
 ### Core Configuration Parameters
 - **`server.port`**: API binding port (default `8080`).

@@ -5,63 +5,60 @@
 server:
   port: 8080
   read_timeout_sec: 30
-  write_timeout_sec: 300   # LLM streaming calls can take up to 240s
+  write_timeout_sec: 300 # LLM streaming calls can take up to 240s
   shutdown_sec: 10
 
 database:
-  # Overridden at runtime by DATABASE_URL env var (set in .env.prod / docker-compose).
-  # The value below is a placeholder only; sslmode=require is mandatory for RDS.
-  url: "postgres://aicm:CHANGE_ME@your-rds-endpoint.us-east-1.rds.amazonaws.com:5432/aicm?sslmode=require"
-  max_conns: 20   # Conservative for RDS db.t3.micro (max_connections ~40)
+  # Overridden at runtime by DATABASE_URL env var if set, otherwise expands the variables below.
+  # The value below requires sslmode=require for RDS.
+  url: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@your-rds-endpoint.us-east-1.rds.amazonaws.com:5432/${POSTGRES_DB:-aicm}?sslmode=require"
+  max_conns: 20 # Conservative for RDS db.t3.micro (max_connections ~40)
   min_conns: 2
   max_conn_life_sec: 3600
 
 llm:
-  provider: "aws"          # Use Amazon Bedrock for production
-  temperature: 0.0          # Deterministic outputs for data analysis & SQL generation
-  aws_region: "us-east-1"  # Must match the region where Bedrock model access is granted
+  provider: "aws" # Use Amazon Bedrock for production
+  temperature: 0.0 # Deterministic outputs for data analysis & SQL generation
+  aws_region: "us-east-1" # Mumbai — broader APAC model support than Hyderabad (ap-south-2)
   # Global fallback model — used if an agent has no specific entry in agent_models.
-  aws_model: "anthropic.claude-3-haiku-20240307-v1:0"
+  aws_model: "us.meta.llama3-1-70b-instruct-v1:0"
 
   # Agent-Specific Model Routing: balance capability vs. cost per task type.
   #
   # Cost reference (us-east-1, per million tokens, input/output):
-  #   Claude 3 Haiku:      $0.25 / $1.25   — cheapest, fast, good for simple tasks
-  #   Claude 3.5 Haiku:    $0.80 / $4.00   — smarter than 3 Haiku, still cheap
-  #   Claude 3.5 Sonnet v2: $3.00 / $15.00  — best reasoning, use only where needed
-  #
-  agent_models:
-    # Intent classification: single-word output, minimal reasoning needed.
-    supervisor: "anthropic.claude-3-haiku-20240307-v1:0"
+  #   Claude 3 Haiku:      $0.25 / $1.25   # Map each agent role to a specific Bedrock ARN (or profile)
+  # We recommend cost-effective models like apac.anthropic.claude-3-haiku-20240307-v1:0
+  # or meta.llama3-1-70b-instruct-v1:0 (great for SQL). Qwen models are also available in ap-south-1.
+  agents:
+    # Supervisor: Intent classification. Haiku 3 is ~99% accurate at $0.25/MTok
+    supervisor: "us.meta.llama3-1-70b-instruct-v1:0"
 
-    # Text-to-SQL with ReAct loop (up to 3 retries): highest reasoning demand.
-    # Sonnet v2 significantly outperforms Haiku on complex SQL generation.
-    analyst: "anthropic.claude-3-5-sonnet-20241022-v2:0"
+    # Analyst: Text-to-SQL + ReAct loop. Llama 3.1 70B / Qwen are highly cost-effective
+    # compared to Sonnet, retaining high SQL generation capabilities.
+    analyst: "us.meta.llama3-1-70b-instruct-v1:0"
 
-    # Chain-of-Thought explanation of "why" metrics changed.
-    # 3.5 Haiku has strong enough reasoning at ~4x cheaper than Sonnet.
-    strategist: "anthropic.claude-3-5-haiku-20241022-v1:0"
+    # Strategist: Chain-of-Thought reasoning.
+    strategist: "us.meta.llama3-1-70b-instruct-v1:0"
 
-    # Structured JSON action proposals (price_match, restock, promotion).
-    # 3.5 Haiku reliably follows JSON schemas.
-    planner: "anthropic.claude-3-5-haiku-20241022-v1:0"
+    # Planner: JSON generation. Note: 3.5 Haiku is sometimes better at JSON but 3 Haiku is cheaper.
+    planner: "us.meta.llama3-1-70b-instruct-v1:0"
 
-    # Email/compliance report drafting — needs good language quality.
-    liaison: "anthropic.claude-3-5-haiku-20241022-v1:0"
+    # Liaison: Professional prose generation.
+    liaison: "us.meta.llama3-1-70b-instruct-v1:0"
 
-    # Rule-based anomaly detection — LLM not invoked; fallback only.
-    watchdog: "anthropic.claude-3-haiku-20240307-v1:0"
+    # Watchdog: Anomaly rules. Haiku 3 is cheapest for fallback.
+    watchdog: "us.meta.llama3-1-70b-instruct-v1:0"
 
 logging:
-  level: "info"   # info for production; debug would expose SQL queries
-  format: "json"  # Structured JSON for CloudWatch / log aggregation
+  level: "info" # info for production; debug would expose SQL queries
+  format: "json" # Structured JSON for CloudWatch / log aggregation
 
 security:
   rate_limit_enabled: true
-  rate_limit_per_minute: 20   # Stricter in production to protect Bedrock spend
-  api_key_auth_enabled: false  # Enable and set API_KEYS env var to lock down the API
+  rate_limit_per_minute: 20 # Stricter in production to protect Bedrock spend
+  api_key_auth_enabled: false # Enable and set API_KEYS env var to lock down the API
 
 cors:
   allow_origins:
-    - "http://localhost"       # nginx proxy on port 80
+    - "http://localhost" # nginx proxy on port 80
     - "https://yourdomain.com" # Replace with your actual domain / Elastic IP

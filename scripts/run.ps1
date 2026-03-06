@@ -1,80 +1,94 @@
-# =============================================================================
-# AI-CM: One-command startup script (Windows PowerShell)
-# Usage: .\scripts\run.ps1
-# =============================================================================
+<#
+.SYNOPSIS
+AI-CM: Run Applications locally for active development.
+Usage: .\scripts\run.ps1 -Profile [local_llm|bedrock]
+#>
+
+param (
+    [Parameter(Mandatory = $true)]
+    [ValidateSet("local_llm", "bedrock")]
+    [string]$Profile
+)
 
 $ErrorActionPreference = "Stop"
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RootDir = Split-Path -Parent $ScriptDir
 $InfraDir = Join-Path $RootDir "infra"
-
-# Check for .env file
-$EnvFile = Join-Path $InfraDir ".env"
-$EnvExample = Join-Path $InfraDir ".env.example"
+$EnvFile = Join-Path $RootDir ".env"
 
 if (-not (Test-Path $EnvFile)) {
-    Write-Host "⚠️  No .env file found. Copying from .env.example..." -ForegroundColor Yellow
-    Copy-Item $EnvExample $EnvFile
-    Write-Host "📝 Please edit infra\.env with your API keys, then re-run this script." -ForegroundColor Cyan
+    Write-Host "[ERROR] Root .env file not found. Copy .env.example to .env and configure it." -ForegroundColor Red
     exit 1
 }
 
-# Read .env file
-$envVars = @{}
-Get-Content $EnvFile | ForEach-Object {
-    if ($_ -match '^\s*([^#][^=]+)=(.*)$') {
-        $envVars[$matches[1].Trim()] = $matches[2].Trim()
+function Parse-Env {
+    param([string]$FilePath, [string]$Section)
+    
+    $inSection = $false
+    $envHash = @{}
+
+    Get-Content $FilePath | ForEach-Object {
+        $line = $_.Trim()
+        if ($line -match "^\[(.*)\]$") {
+            if ($Matches[1] -eq $Section) { $inSection = $true }
+            else { $inSection = $false }
+        }
+        elseif ($inSection -and $line -match "^([^#=]+)=(.*)$") {
+            $key = $Matches[1].Trim()
+            $value = $Matches[2].Trim()
+            # Remove inline comments
+            $value = $value -replace "\s*#.*$",""
+            # Strip quotes
+            $value = $value -replace '^"|"$', ''
+            $value = $value -replace "^'|'$", ''
+            
+            $envHash[$key] = $value
+            [Environment]::SetEnvironmentVariable($key, $value, "Process")
+        }
     }
+    return $envHash
 }
 
-$provider = $envVars["LLM_PROVIDER"]
+Write-Host "=================================================="
+Write-Host " Starting AI-CM Local Environment                 "
+Write-Host " Profile: $Profile                                "
+Write-Host "=================================================="
 
-# Validate required API key
-if ($provider -eq "gemini" -and ($envVars["GEMINI_API_KEY"] -eq "" -or $envVars["GEMINI_API_KEY"] -eq "your_gemini_api_key_here")) {
-    Write-Host "❌ GEMINI_API_KEY is not set. Please edit infra\.env" -ForegroundColor Red
-    exit 1
+if ($Profile -eq "local_llm") {
+    Write-Host "Parsing [local.local] keys..." -ForegroundColor Cyan
+    Parse-Env -FilePath $EnvFile -Section "local.local"
+    $ComposeFile = "docker-compose.local-llm.yml"
 }
-elseif ($provider -eq "openai" -and ($envVars["OPENAI_API_KEY"] -eq "" -or $envVars["OPENAI_API_KEY"] -eq "your_openai_api_key_here")) {
-    Write-Host "❌ OPENAI_API_KEY is not set. Please edit infra\.env" -ForegroundColor Red
-    exit 1
-}
-elseif ($provider -eq "aws") {
-    if ($envVars["AWS_ACCESS_KEY_ID"] -eq "" -or $envVars["AWS_ACCESS_KEY_ID"] -eq "your_aws_access_key") {
-        Write-Host "⚠️  AWS_ACCESS_KEY_ID is not set in infra\.env. Assuming IAM roles or ~/.aws/credentials are configured." -ForegroundColor Yellow
-    }
+elseif ($Profile -eq "bedrock") {
+    Write-Host "Parsing [local.aws] keys..." -ForegroundColor Cyan
+    Parse-Env -FilePath $EnvFile -Section "local.aws"
+    $ComposeFile = "docker-compose.bedrock.yml"
 }
 
-Write-Host "🚀 Starting AI-CM (LLM Provider: $provider)..." -ForegroundColor Green
-
-# Stop any existing services first
-Write-Host "   Stopping existing services..." -ForegroundColor Gray
 Push-Location $InfraDir
 try {
-    docker compose down --remove-orphans 2>$null
+    Write-Host "Building Docker images (locally)..." -ForegroundColor Yellow
+    docker compose -f $ComposeFile build
+    
+    Write-Host "Starting containers..." -ForegroundColor Yellow
+    docker compose -f $ComposeFile up -d
+
+    if ($Profile -eq "local_llm") {
+        Write-Host "Pulling required local LLM models..." -ForegroundColor Yellow
+        docker exec aicm-ollama ollama pull llama3.2
+        docker exec aicm-ollama ollama pull tinyllama
+    }
+
+    Write-Host ""
+    Write-Host "✅ System started successfully!" -ForegroundColor Green
+    Write-Host "   Frontend: http://localhost:3000"
+    Write-Host "   Backend:  http://localhost:8080"
 }
 catch {
-    # Ignore if nothing was running
+    Write-Host "Startup failed: $_" -ForegroundColor Red
+    exit 1
 }
 finally {
     Pop-Location
 }
-
-Push-Location $InfraDir
-try {
-    docker compose --env-file .env up --build -d
-}
-finally {
-    Pop-Location
-}
-
-$frontendPort = if ($envVars["FRONTEND_PORT"]) { $envVars["FRONTEND_PORT"] } else { "3000" }
-$backendPort = if ($envVars["BACKEND_PORT"]) { $envVars["BACKEND_PORT"] } else { "8080" }
-
-Write-Host ""
-Write-Host "✅ AI-CM is starting up!" -ForegroundColor Green
-Write-Host "   Frontend: http://localhost:$frontendPort"
-Write-Host "   Backend:  http://localhost:$backendPort"
-Write-Host ""
-Write-Host "📋 View logs: docker compose -f infra/docker-compose.yml logs -f" -ForegroundColor Cyan
-Write-Host "🛑 Stop:      docker compose -f infra/docker-compose.yml down" -ForegroundColor Cyan

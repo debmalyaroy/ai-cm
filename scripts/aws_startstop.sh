@@ -5,7 +5,7 @@
 #
 # Prerequisites:
 #   - AWS CLI v2 installed and configured (aws configure)
-#   - EC2_INSTANCE_ID and RDS_INSTANCE_ID set in config/.env.prod or as env vars
+#   - EC2_INSTANCE_ID and RDS_INSTANCE_ID set in [prod.aws] section of root .env
 #
 # Usage:
 #   ./scripts/aws_startstop.sh start   — Start EC2 and RDS
@@ -15,23 +15,42 @@
 
 set -e
 
-# ── Load IDs from env.prod if not already in environment ─────────────────────
-ENV_FILE="$(dirname "$0")/../config/.env.prod"
+# ── Load IDs from [prod.aws] section of root .env ────────────────────────────
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT_DIR="$(dirname "$SCRIPT_DIR")"
+ENV_FILE="$ROOT_DIR/.env"
+
 if [ -f "$ENV_FILE" ]; then
-    # Source only the ID lines (safe subset)
-    EC2_INSTANCE_ID="${EC2_INSTANCE_ID:-$(grep '^EC2_INSTANCE_ID=' "$ENV_FILE" | cut -d= -f2-)}"
-    RDS_INSTANCE_ID="${RDS_INSTANCE_ID:-$(grep '^RDS_INSTANCE_ID=' "$ENV_FILE" | cut -d= -f2-)}"
-    AWS_REGION="${AWS_REGION:-$(grep '^AWS_REGION=' "$ENV_FILE" | cut -d= -f2-)}"
+    in_section=0
+    while IFS= read -r line || [ -n "$line" ]; do
+        [[ "$line" =~ ^#.* ]] && continue
+        [[ -z "${line// }" ]] && continue
+        if [[ "$line" =~ ^\[(.*)\]$ ]]; then
+            if [ "${BASH_REMATCH[1]}" == "prod.aws" ]; then in_section=1; else in_section=0; fi
+            continue
+        fi
+        if [ $in_section -eq 1 ] && [[ "$line" =~ ^([^=]+)=(.*)$ ]]; then
+            key="${BASH_REMATCH[1]// /}"
+            value="${BASH_REMATCH[2]%%#*}"
+            value="${value%"${value##*[![:space:]]}"}"
+            value="${value%\"}"; value="${value#\"}"; value="${value%\'}"; value="${value#\'}"
+            case "$key" in
+                EC2_INSTANCE_ID) [ -z "$EC2_INSTANCE_ID" ] && EC2_INSTANCE_ID="$value" ;;
+                RDS_INSTANCE_ID) [ -z "$RDS_INSTANCE_ID" ] && RDS_INSTANCE_ID="$value" ;;
+                AWS_REGION)      [ -z "$AWS_REGION" ]      && AWS_REGION="$value" ;;
+            esac
+        fi
+    done < "$ENV_FILE"
 fi
 
 AWS_REGION="${AWS_REGION:-us-east-1}"
 ACTION="${1:-status}"
 
 if [ -z "$EC2_INSTANCE_ID" ] || [ -z "$RDS_INSTANCE_ID" ]; then
-    echo "❌ EC2_INSTANCE_ID and RDS_INSTANCE_ID must be set."
-    echo "   Add them to config/.env.prod or export them before running:"
-    echo "     export EC2_INSTANCE_ID=i-0123456789abcdef0"
-    echo "     export RDS_INSTANCE_ID=aicm-postgres"
+    echo "EC2_INSTANCE_ID and RDS_INSTANCE_ID must be set."
+    echo "   Add them to the [prod.aws] section of your root .env file:"
+    echo "     EC2_INSTANCE_ID=i-0123456789abcdef0"
+    echo "     RDS_INSTANCE_ID=aicm-postgres"
     exit 1
 fi
 
@@ -64,7 +83,7 @@ status)
 
 # ── START ─────────────────────────────────────────────────────────────────────
 start)
-    echo "🟢 Starting RDS instance: $RDS_INSTANCE_ID..."
+    echo "Starting RDS instance: $RDS_INSTANCE_ID..."
     RDS_S=$(rds_state)
     if [ "$RDS_S" = "available" ]; then
         echo "   RDS is already running."
@@ -76,13 +95,13 @@ start)
         aws rds wait db-instance-available \
             --db-instance-identifier "$RDS_INSTANCE_ID" \
             --region "$AWS_REGION"
-        echo "   ✓ RDS is available."
+        echo "   RDS is available."
     else
         echo "   RDS state is '$RDS_S' — cannot start. Check AWS Console."
         exit 1
     fi
 
-    echo "🟢 Starting EC2 instance: $EC2_INSTANCE_ID..."
+    echo "Starting EC2 instance: $EC2_INSTANCE_ID..."
     EC2_S=$(ec2_state)
     if [ "$EC2_S" = "running" ]; then
         echo "   EC2 is already running."
@@ -94,30 +113,29 @@ start)
         aws ec2 wait instance-running \
             --instance-ids "$EC2_INSTANCE_ID" \
             --region "$AWS_REGION"
-        echo "   ✓ EC2 is running."
+        echo "   EC2 is running."
     else
         echo "   EC2 state is '$EC2_S' — cannot start. Check AWS Console."
         exit 1
     fi
 
-    # Print the public IP
     PUBLIC_IP=$(aws ec2 describe-instances \
         --instance-ids "$EC2_INSTANCE_ID" \
         --region "$AWS_REGION" \
         --query "Reservations[0].Instances[0].PublicIpAddress" \
         --output text 2>/dev/null)
     echo ""
-    echo "✅ Services started."
+    echo "Services started."
     echo "   App URL: http://$PUBLIC_IP"
     echo "   SSH:     ssh -i your-key.pem ec2-user@$PUBLIC_IP"
     echo ""
-    echo "⚠️  Reminder: Stop services when not in use to stay within Free Tier:"
+    echo "WARNING: Stop services when not in use to stay within Free Tier:"
     echo "   ./scripts/aws_startstop.sh stop"
     ;;
 
 # ── STOP ──────────────────────────────────────────────────────────────────────
 stop)
-    echo "🔴 Stopping EC2 instance: $EC2_INSTANCE_ID..."
+    echo "Stopping EC2 instance: $EC2_INSTANCE_ID..."
     EC2_S=$(ec2_state)
     if [ "$EC2_S" = "stopped" ]; then
         echo "   EC2 is already stopped."
@@ -129,12 +147,12 @@ stop)
         aws ec2 wait instance-stopped \
             --instance-ids "$EC2_INSTANCE_ID" \
             --region "$AWS_REGION"
-        echo "   ✓ EC2 stopped."
+        echo "   EC2 stopped."
     else
         echo "   EC2 state is '$EC2_S' — stopping may not be possible right now."
     fi
 
-    echo "🔴 Stopping RDS instance: $RDS_INSTANCE_ID..."
+    echo "Stopping RDS instance: $RDS_INSTANCE_ID..."
     RDS_S=$(rds_state)
     if [ "$RDS_S" = "stopped" ]; then
         echo "   RDS is already stopped."
@@ -143,13 +161,13 @@ stop)
             --db-instance-identifier "$RDS_INSTANCE_ID" \
             --region "$AWS_REGION" > /dev/null
         echo "   RDS stop initiated (takes ~1 min; no need to wait)."
-        echo "   ✓ RDS stopping."
+        echo "   RDS stopping."
     else
         echo "   RDS state is '$RDS_S' — cannot stop right now."
     fi
 
     echo ""
-    echo "✅ Stop commands issued."
+    echo "Stop commands issued."
     echo "   EC2 and RDS are not billed while stopped."
     echo "   Note: RDS auto-starts after 7 days (AWS limitation)."
     ;;

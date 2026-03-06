@@ -1,0 +1,40 @@
+# AI-CM Backend Configuration - LOCAL (Ollama Docker)
+# Secrets should be provided via environment variables (injected by run.ps1/sh from root .env [local.local])
+
+server:
+  port: 8080
+  read_timeout_sec: 30
+  write_timeout_sec: 300
+  shutdown_sec: 5
+
+database:
+  url: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-aicm}?sslmode=disable"
+  max_conns: 10
+  min_conns: 2
+  max_conn_life_sec: 3600
+
+llm:
+  provider: "local"
+  temperature: 0.0
+  local_url: "http://ollama:11434/api/generate"
+  local_model: "llama3.2"
+
+  agent_models:
+    supervisor: "tinyllama"
+    analyst: "llama3.2"
+    strategist: "llama3.2"
+    planner: "llama3.2"
+    liaison: "llama3.2"
+    watchdog: "tinyllama"
+
+logging:
+  level: "debug"
+  format: "text"
+
+security:
+  rate_limit_enabled: false
+
+cors:
+  allow_origins:
+    - "http://localhost:3000"
+    - "http://localhost:3001"

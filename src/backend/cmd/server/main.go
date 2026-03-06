@@ -36,6 +36,22 @@ import (
 // @host localhost:8080
 // @BasePath /api
 func main() {
+	// --health-check mode: ping the running server and exit.
+	// Used by Docker HEALTHCHECK to avoid starting a second full server instance.
+	if len(os.Args) > 1 && os.Args[1] == "--health-check" {
+		configPath := os.Getenv("CONFIG_PATH")
+		port := "8080"
+		if configPath != "" {
+			cfg := config.Load(configPath)
+			port = strconv.Itoa(cfg.Server.Port)
+		}
+		resp, err := http.Get("http://localhost:" + port + "/api/health")
+		if err != nil || resp.StatusCode != http.StatusOK {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
 	// Load config: YAML file + env overrides
 	configPath := os.Getenv("CONFIG_PATH")
 	if configPath == "" {
