@@ -19,6 +19,8 @@ services:
     image: ${DOCKER_REGISTRY}/aicm-backend:latest
     container_name: aicm-backend
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"  # Internal EC2 access only; external traffic goes via nginx on port 80
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -44,6 +46,8 @@ services:
     image: ${DOCKER_REGISTRY}/aicm-frontend:latest
     container_name: aicm-frontend
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"  # Internal EC2 access only (nginx on port 80 serves external traffic)
     depends_on:
       - backend
     logging:

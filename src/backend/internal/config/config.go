@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"os"
 	"strconv"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -121,6 +122,9 @@ func Load(path string) *Config {
 	}
 	if v := os.Getenv("LOG_LEVEL"); v != "" {
 		cfg.Logging.Level = v
+	}
+	if v := os.Getenv("CORS_ORIGINS"); v != "" {
+		cfg.CORS.AllowOrigins = strings.Split(v, ",")
 	}
 
 	return cfg

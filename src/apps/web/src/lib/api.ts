@@ -1,3 +1,5 @@
+// Empty string → relative URLs (/api/...) which nginx proxies to the backend.
+// Override via VITE_API_URL in .env.local if needed for non-standard local setups.
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
 export async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> {
