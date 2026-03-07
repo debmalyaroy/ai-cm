@@ -1,7 +1,8 @@
 # Design Document: AI Category Manager - Agentic Decision Intelligence Platform
 
-> **Note:** This document captures the **initial system design and architectural intent** for AI-CM. Some sections (microservices architecture, S3/MinIO ingestion, Python forecasting service, gRPC inter-service communication) describe aspirational future capabilities that are not yet implemented. The actual production implementation is a **modular Go monolith** running on AWS EC2 + RDS. For the current implementation details, refer to:
-> - **[Agentic Architecture (actual)](design_agent.md)** — Cognitive layer, agent patterns, actual repo structure
+> **Note:** This document captures the **initial system design and architectural intent** for AI-CM. Features marked as Phase 2 in the [Phased Implementation Plan](phased_implementation.md) (microservices gRPC, S3/MinIO ingestion, Python forecasting service, closed-loop execution, OIDC/JWT auth) are deferred and not yet built. The current production implementation is a **modular Go monolith** on AWS EC2 + RDS. For the current implementation details, refer to:
+> - **[Phased Implementation Plan](phased_implementation.md)** — Requirement-by-requirement status (DONE / PLANNED) across Phase 1 and Phase 2
+> - **[Agentic Architecture (actual)](design_agent.md)** — Cognitive layer, agent patterns, RAG pipeline, actual repo structure
 > - **[Low Level Design (actual)](low_level_design.md)** — Sequence diagrams, REST API map, AWS deployment, multi-arch build pipeline
 
 ## Overview

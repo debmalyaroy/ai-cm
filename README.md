@@ -19,8 +19,9 @@ This repository contains the complete design and implementation roadmap for AI-C
 | Artifact | Description |
 | :--- | :--- |
 | **[Product Requirements](requirements.md)** | Detailed problem statement, user personas, use cases, and core capabilities. |
-| **[System Design](plan/design.md)** | Initial design document: technical architecture intent, agent interfaces, Logical Lakehouse strategy. Some sections are aspirational. See LLD for current implementation. |
-| **[Agentic Architecture](docs/design_agent.md)** | **The Cognitive Core.** Detailed design of the Multi-Agent System (Supervisor, Analyst, Strategist, Planner). |
+| **[Phased Implementation](docs/phased_implementation.md)** | **What is built vs. planned.** Phase 1 (POC) vs Phase 2 (Production) breakdown with per-requirement status (DONE / PLANNED). |
+| **[System Design](plan/design.md)** | Initial design document: technical architecture intent, agent interfaces, Logical Lakehouse strategy. Aspirational sections are deferred to Phase 2. |
+| **[Agentic Architecture](docs/design_agent.md)** | **The Cognitive Core.** Detailed design of the Multi-Agent System (Supervisor, Analyst, Strategist, Planner), RAG pipeline, and repo structure. |
 | **[AWS Deployment Guide](docs/aws_deployment_guide.md)** | Deploy to AWS Free Tier (EC2 + RDS + Bedrock). Includes Windows-specific PuTTY / PSCP instructions, model selection analysis (Llama, Mistral, Qwen, DeepSeek, OpenAI), and cost estimates. |
 | **[How to Run Locally](docs/HOW_TO_RUN_LOCALLY.md)** | Run the full stack locally with Docker (Ollama or Bedrock profiles). |
 | **[Low Level Design](docs/low_level_design.md)** | Modular Monolith boundaries, Data Flows, Sequence Diagrams, Memory RAG pipeline, and AWS production deployment architecture (EC2 + RDS + Bedrock, multi-arch Docker build). |

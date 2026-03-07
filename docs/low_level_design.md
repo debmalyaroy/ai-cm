@@ -1,5 +1,7 @@
 # AI Category Manager: Low Level Design (LLD)
 
+> For a requirement-by-requirement breakdown of what is built vs. planned (Phase 1 POC vs Phase 2 Production), see the **[Phased Implementation Plan](phased_implementation.md)**.
+
 ## 1. High-Level Architecture & Component Boundaries
 
 The AI Category Manager (AI-CM) is structured as a modular Monolith utilizing a highly specialized Agentic architecture interconnected with a Logical Data Lakehouse.
@@ -608,9 +610,14 @@ This allows prompts to specifically block unauthorized access to other schema ta
 ## 8. Subsystem: Deep Episodic Memory (PgVector)
 Rather than blindly stuffing conversational arrays back into the LLM context limits, the platform relies on **Contextual Memory Retrieval** through Semantic Indexing.
 
-- **Storage Hook**: Handlers fire an asynchronous storage event after an LLM successfully responds to the user.
-- **Embedding Generation**: It leverages `llmClient.Embed(query + response)` to convert textual meaning into dense float vectors.
-- **Retrieval Engine**: By querying `memory.GetRelevant()`, the system calculates vector offsets returning the top 3 most "historically similar" QA pairs.
+- **Storage Hook**: After each successful LLM response, the assistant message is stored asynchronously in `agent_memory` (type `episodic`) with its embedding.
+- **Embedding Generation**: `getEmbedding()` calls `llm.Embedder` (Bedrock Titan v1 in production, 1536 dims). The embedding is computed **once per query** and reused across all three parallel memory lookups.
+- **3-Tier Memory**: STM (last 10 `chat_messages`, no vector), LTM Episodic (`agent_memory`, past Q/A pairs), LTM Semantic (`business_context`, business rules and facts).
+- **Retrieval Engine**: `BuildContext()` runs three cosine-similarity queries in parallel goroutines, returning top-3 results from each tier, then injects the combined context into the agent prompt.
+- **SQL Cache (L2)**: Analyst agent uses a separate vector search on `agent_memory` (type `sql_cache`) with a similarity threshold of ≥ 0.92 and 24-hour TTL to retrieve previously generated SQL for semantically equivalent queries.
+- **Business Context Seeding**: `business_context` facts are seeded via `infra/postgres/*.sql` with pre-computed embeddings. A document ingestion pipeline (Phase 2) will allow loading PDFs and wikis dynamically.
+
+For the full RAG architecture diagram and embedding model details, see **[Agentic Architecture § 6](design_agent.md#6-detailed-rag-architecture-the-brain)**.
 
 ## 9. Security & Rate Limiting Controls
 - **API Key Auth**: Secured via custom Gin middleware leveraging `API_KEYS` env variable. Bearer Token required for programmatic API consumption.

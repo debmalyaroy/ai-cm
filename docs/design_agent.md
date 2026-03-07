@@ -2,6 +2,8 @@
 
 This document details the **Cognitive Architecture** of AI-CM, treating the system as a collaborative team of autonomous agents.
 
+> For a requirement-by-requirement breakdown of what is built vs. planned, see the **[Phased Implementation Plan](phased_implementation.md)**.
+
 ## 1. Why Agentic AI? (vs. Standard GenAI)
 Standard LLM implementations (e.g., a simple chatbot wrapper) suffer from hallucinations, inability to execute actions, and lack of rigorous logic. **Agentic AI** solves this by introducing:
 
@@ -163,22 +165,50 @@ graph LR
 ---
 
 ## 6. Detailed RAG Architecture (The Brain)
-**Goal:** Retrieve business context (PDFs, Wikis) for Reasoning.
+**Goal:** Retrieve business context for Strategist reasoning and SQL caching for the Analyst.
+
+The RAG pipeline has two sides. The **retrieval side is fully implemented** in Phase 1. The **document ingestion side** (chunking arbitrary files) is a Phase 2 enhancement — Phase 1 seeds the vector store via SQL scripts with pre-computed facts.
 
 ### 6.1 RAG Flow
 
 ```mermaid
 graph TD
-    Doc["Document"] --> Chunking
-    Chunking --> Embedding
-    Embedding --> VectorDB[("pgvector")]
-    
-    Query["User Query"] --> EmbedQuery
-    EmbedQuery --> Search
-    VectorDB -->|"Matches"| Search
-    
-    Search -->|"Top-3 by cosine similarity"| Agent
+    subgraph "Ingestion Side"
+        Doc["Business Context Facts\n(seeded via infra/postgres/*.sql)"]
+        DocP2["Phase 2: PDFs / Wikis / CSVs\n(file chunking pipeline)"]
+        Chunking["Text Chunking"]
+        EmbedIngest["getEmbedding()\nBedrock Titan v1 (prod)\nOllama nomic-embed (dev)"]
+        VectorDB[("pgvector\nbusiness_context\nagent_memory")]
+        Doc -->|"INSERT with embedding"| VectorDB
+        DocP2 --> Chunking --> EmbedIngest --> VectorDB
+    end
+
+    subgraph "Retrieval Side (Phase 1 — Implemented)"
+        Query["User Query"] --> EmbedQuery["getEmbedding()\n(same model as ingestion)"]
+        EmbedQuery --> Search["Cosine Similarity Search\n(pgvector <=> operator)"]
+        VectorDB -->|"Matches"| Search
+        Search -->|"Top-3 by similarity"| ContextBuilder["BuildContext()\nParallel goroutines"]
+        ContextBuilder --> Agent["Strategist Agent\n(CoT + RAG context)"]
+    end
+
+    subgraph "SQL Cache (Analyst — Phase 1)"
+        SQLQuery["Natural Language SQL Query"] --> EmbedSQL["getEmbedding()"]
+        EmbedSQL --> SQLSearch["Vector Search\nmemory_type='sql_cache'\nthreshold ≥ 0.92, 24h TTL"]
+        VectorDB -->|"Cache hit"| SQLSearch
+        SQLSearch -->|"Cache miss → LLM"| LLM["LLM SQL Generation"]
+        LLM -->|"Store result"| VectorDB
+    end
 ```
+
+### 6.2 Embedding Model Details
+
+| Environment | Embedding Model | Dimensions | Notes |
+|---|---|---|---|
+| Production (Bedrock) | `amazon.titan-embed-text-v1` | 1536 | Matches `vector(1536)` DB schema |
+| Local (Ollama) | Model-dependent | varies | `nomic-embed-text`=768, `mxbai-embed-large`=1024 — schema mismatch; requires migration if used |
+| Fallback (dev/test) | Deterministic hash | 1536 | Used when LLM client does not implement `llm.Embedder`; not semantically meaningful |
+
+The `llm.Embedder` interface is optional — type-asserted at runtime. `BedrockClient` and `LocalClient` both implement it. The embedding is computed **once per request** and shared across all 3 parallel memory queries (episodic history, semantic facts, SQL cache lookup).
 
 ---
 
