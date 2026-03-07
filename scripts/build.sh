@@ -19,6 +19,7 @@ error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 parse_env_prod() {
     local in_section=0
     while IFS= read -r line || [ -n "$line" ]; do
+        line="${line//$'\r'/}"
         [[ "$line" =~ ^#.* ]] && continue
         [[ -z "${line// }" ]] && continue
         if [[ "$line" =~ ^\[(.*)\]$ ]]; then
@@ -44,9 +45,12 @@ build_backend() {
     cd "$ROOT_DIR/src/backend"
     info "Running internal unit tests..."
     go test ./internal/... -count=1 || error "Backend internal tests failed"
-    info "Building cross-platform Linux binary..."
-    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o "$ROOT_DIR/bin/aicm-server" ./cmd/server
-    info "Backend built: bin/aicm-server (Linux)"
+    mkdir -p "$ROOT_DIR/bin"
+    info "Building Linux binary (amd64)..."
+    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o "$ROOT_DIR/bin/aicm-server-amd64" ./cmd/server
+    info "Building Linux binary (arm64)..."
+    CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o "$ROOT_DIR/bin/aicm-server-arm64" ./cmd/server
+    info "Backend built: bin/aicm-server-amd64, bin/aicm-server-arm64"
 }
 
 build_frontend() {
@@ -64,16 +68,24 @@ build_frontend() {
 build_docker() {
     info "Building Docker images..."
     cd "$ROOT_DIR"
-    
+
     REGISTRY_USER="localdev"
+    PLATFORMS="linux/amd64,linux/arm64"
+
+    # Ensure a multi-arch buildx builder is available
+    info "Setting up multi-arch buildx builder (aicm-builder)..."
+    create_out=$(docker buildx create --name aicm-builder --driver docker-container --bootstrap 2>&1) || \
+        { echo "$create_out" | grep -q "existing instance" || error "Failed to create buildx builder: $create_out"; }
+    docker buildx use aicm-builder
+
     if [ "$TARGET_ENV" == "prod" ]; then
         if [ -f "$ENV_FILE" ]; then parse_env_prod; fi
-        
+
         if [ -z "$DOCKER_USERNAME" ]; then
             error "DOCKER_USERNAME must be set in .env [prod.aws] or CI environment to push to production"
         fi
         REGISTRY_USER="$DOCKER_USERNAME"
-        
+
         # Prefer PAT (Personal Access Token) over plain password
         if [ -n "$DOCKER_PAT" ]; then
             info "Logging into DockerHub using Personal Access Token..."
@@ -87,19 +99,29 @@ build_docker() {
     BACKEND_TAG="$REGISTRY_USER/aicm-backend:latest"
     FRONTEND_TAG="$REGISTRY_USER/aicm-frontend:latest"
 
-    info "Building backend image: $BACKEND_TAG"
-    docker build -t "$BACKEND_TAG" -f infra/Dockerfile.backend ./src/backend
-    
-    info "Building frontend image: $FRONTEND_TAG"
-    docker build -t "$FRONTEND_TAG" -f infra/Dockerfile.frontend ./src/apps/web
-
     if [ "$TARGET_ENV" == "prod" ]; then
-        info "Pushing images to DockerHub..."
-        docker push "$BACKEND_TAG"
-        docker push "$FRONTEND_TAG"
-    fi
-    if [ "$TARGET_ENV" != "prod" ]; then
-        warn "Images built locally only (tag: localdev/...). To push to DockerHub:"
+        info "Building and pushing multi-arch backend image ($PLATFORMS): $BACKEND_TAG"
+        docker buildx build --platform "$PLATFORMS" -t "$BACKEND_TAG" \
+            -f infra/Dockerfile.backend ./src/backend --push
+
+        info "Building and pushing multi-arch frontend image ($PLATFORMS): $FRONTEND_TAG"
+        docker buildx build --platform "$PLATFORMS" -t "$FRONTEND_TAG" \
+            -f infra/Dockerfile.frontend ./src/apps/web --push
+
+        info "Multi-arch images pushed: $BACKEND_TAG, $FRONTEND_TAG"
+    else
+        # Docker daemon cannot load a multi-arch image; build native arch only for local use
+        LOCAL_PLATFORM="linux/$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
+        warn "Local build: loading native arch only ($LOCAL_PLATFORM). Multi-arch requires a registry push."
+        warn "   To build and push multi-arch images: ./scripts/build.sh docker -t prod"
+
+        docker buildx build --platform "$LOCAL_PLATFORM" -t "$BACKEND_TAG" \
+            -f infra/Dockerfile.backend ./src/backend --load
+
+        docker buildx build --platform "$LOCAL_PLATFORM" -t "$FRONTEND_TAG" \
+            -f infra/Dockerfile.frontend ./src/apps/web --load
+
+        warn "Images loaded locally (tag: localdev/...). To push to DockerHub:"
         warn "   ./scripts/build.sh all -t prod"
     fi
     info "Docker images built successfully"

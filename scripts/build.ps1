@@ -66,16 +66,22 @@ function Build-Backend {
         # go test ./internal/... -count=1
         # if ($LASTEXITCODE -ne 0) { Write-Err "Backend unit tests failed"; exit 1 }
 
-        Write-Info "Building cross-platform Linux binary (CGO_ENABLED=0 GOOS=linux GOARCH=amd64)..."
+        $binDir = Join-Path $RootDir "bin"
+        if (-not (Test-Path $binDir)) { New-Item -ItemType Directory -Path $binDir | Out-Null }
+
+        Write-Info "Building Linux binary (amd64)..."
         $env:CGO_ENABLED = "0"
         $env:GOOS        = "linux"
         $env:GOARCH      = "amd64"
-        $binDir = Join-Path $RootDir "bin"
-        if (-not (Test-Path $binDir)) { New-Item -ItemType Directory -Path $binDir | Out-Null }
-        go build -o (Join-Path $binDir "aicm-server") ./cmd/server
-        if ($LASTEXITCODE -ne 0) { Write-Err "Backend build failed"; exit 1 }
+        go build -o (Join-Path $binDir "aicm-server-amd64") ./cmd/server
+        if ($LASTEXITCODE -ne 0) { Write-Err "Backend build failed (amd64)"; exit 1 }
 
-        Write-Info "Backend built: bin\aicm-server (Linux amd64)"
+        Write-Info "Building Linux binary (arm64)..."
+        $env:GOARCH = "arm64"
+        go build -o (Join-Path $binDir "aicm-server-arm64") ./cmd/server
+        if ($LASTEXITCODE -ne 0) { Write-Err "Backend build failed (arm64)"; exit 1 }
+
+        Write-Info "Backend built: bin\aicm-server-amd64, bin\aicm-server-arm64"
     }
     finally {
         Pop-Location
@@ -108,6 +114,19 @@ function Build-Docker {
     Push-Location $RootDir
     try {
         $registryUser = "localdev"
+        $platforms    = "linux/amd64,linux/arm64"
+
+        # Ensure a multi-arch buildx builder is available
+        Write-Info "Setting up multi-arch buildx builder (aicm-builder)..."
+        $prevEA = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        $createOut = docker buildx create --name aicm-builder --driver docker-container --bootstrap 2>&1
+        $createExit = $LASTEXITCODE
+        $ErrorActionPreference = $prevEA
+        if ($createExit -ne 0 -and ($createOut -notmatch "existing instance")) {
+            Write-Err "Failed to create buildx builder: $createOut"; exit 1
+        }
+        docker buildx use aicm-builder
 
         if ($Target -eq "prod") {
             # Read only the [prod.aws] section for Docker credentials
@@ -142,23 +161,30 @@ function Build-Docker {
         $backendTag  = "$registryUser/aicm-backend:latest"
         $frontendTag = "$registryUser/aicm-frontend:latest"
 
-        Write-Info "Building backend image: $backendTag"
-        docker build -t $backendTag -f infra/Dockerfile.backend ./src/backend
-        if ($LASTEXITCODE -ne 0) { Write-Err "Backend Docker build failed"; exit 1 }
-
-        Write-Info "Building frontend image: $frontendTag"
-        docker build -t $frontendTag -f infra/Dockerfile.frontend ./src/apps/web
-        if ($LASTEXITCODE -ne 0) { Write-Err "Frontend Docker build failed"; exit 1 }
-
         if ($Target -eq "prod") {
-            Write-Info "Pushing images to DockerHub as $registryUser/..."
-            docker push $backendTag
-            if ($LASTEXITCODE -ne 0) { Write-Err "Failed to push backend image"; exit 1 }
-            docker push $frontendTag
-            if ($LASTEXITCODE -ne 0) { Write-Err "Failed to push frontend image"; exit 1 }
-            Write-Info "Images pushed: $backendTag and $frontendTag"
+            Write-Info "Building and pushing multi-arch backend image ($platforms): $backendTag"
+            docker buildx build --platform $platforms -t $backendTag -f infra/Dockerfile.backend ./src/backend --push
+            if ($LASTEXITCODE -ne 0) { Write-Err "Backend Docker build/push failed"; exit 1 }
+
+            Write-Info "Building and pushing multi-arch frontend image ($platforms): $frontendTag"
+            docker buildx build --platform $platforms -t $frontendTag -f infra/Dockerfile.frontend ./src/apps/web --push
+            if ($LASTEXITCODE -ne 0) { Write-Err "Frontend Docker build/push failed"; exit 1 }
+
+            Write-Info "Multi-arch images pushed: $backendTag and $frontendTag"
         } else {
-            Write-Warn "Images built locally only (registry: $registryUser). NOT pushed to DockerHub."
+            # Docker daemon cannot load a multi-arch image; detect native arch for local use
+            $arch = if ([System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture -eq "Arm64") { "arm64" } else { "amd64" }
+            $localPlatform = "linux/$arch"
+            Write-Warn "Local build: loading native arch only ($localPlatform). Multi-arch requires a registry push."
+            Write-Warn "To build and push multi-arch images: .\scripts\build.ps1 docker -Target prod"
+
+            docker buildx build --platform $localPlatform -t $backendTag -f infra/Dockerfile.backend ./src/backend --load
+            if ($LASTEXITCODE -ne 0) { Write-Err "Backend Docker build failed"; exit 1 }
+
+            docker buildx build --platform $localPlatform -t $frontendTag -f infra/Dockerfile.frontend ./src/apps/web --load
+            if ($LASTEXITCODE -ne 0) { Write-Err "Frontend Docker build failed"; exit 1 }
+
+            Write-Warn "Images loaded locally (registry: $registryUser). NOT pushed to DockerHub."
             Write-Warn "To build AND push to DockerHub: .\scripts\build.ps1 all -Target prod"
         }
 

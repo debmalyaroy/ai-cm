@@ -15,6 +15,7 @@ parse_env_prod() {
     local in_section=0
 
     while IFS= read -r line || [ -n "$line" ]; do
+        line="${line//$'\r'/}"
         [[ "$line" =~ ^#.* ]] && continue
         [[ -z "${line// }" ]] && continue
 
@@ -52,6 +53,21 @@ parse_env_prod
 
 if [ -z "$DOCKER_REGISTRY" ]; then
     echo "[ERROR] DOCKER_REGISTRY environment variable missing in [prod.aws]."
+    exit 1
+fi
+
+if [ -z "$DOCKER_USERNAME" ]; then
+    echo "[ERROR] DOCKER_USERNAME environment variable missing in [prod.aws]."
+    exit 1
+fi
+
+echo "Logging into DockerHub as $DOCKER_USERNAME..."
+if [ -n "$DOCKER_PAT" ]; then
+    echo "$DOCKER_PAT" | docker login -u "$DOCKER_USERNAME" --password-stdin || { echo "[ERROR] Docker login failed. Check DOCKER_PAT in .env [prod.aws]."; exit 1; }
+elif [ -n "$DOCKER_PASSWORD" ]; then
+    echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin || { echo "[ERROR] Docker login failed."; exit 1; }
+else
+    echo "[ERROR] Neither DOCKER_PAT nor DOCKER_PASSWORD is set in [prod.aws]."
     exit 1
 fi
 
