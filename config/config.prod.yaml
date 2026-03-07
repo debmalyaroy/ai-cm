@@ -11,7 +11,7 @@ server:
 database:
   # Overridden at runtime by DATABASE_URL env var if set, otherwise expands the variables below.
   # The value below requires sslmode=require for RDS.
-  url: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@your-rds-endpoint.us-east-1.rds.amazonaws.com:5432/${POSTGRES_DB:-aicm}?sslmode=require"
+  url: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@aicm-postgres.c3m6064k4csu.ap-south-1.rds.amazonaws.com:5432/${POSTGRES_DB:-aicm}?sslmode=require"
   max_conns: 20 # Conservative for RDS db.t3.micro (max_connections ~40)
   min_conns: 2
   max_conn_life_sec: 3600
