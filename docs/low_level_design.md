@@ -336,11 +336,15 @@ sequenceDiagram
     participant DB as Postgres
 
     UI->>API: GET /api/reports/download
-    API->>DB: Run aggregate queries (top products, sales by region, etc.)
+    activate API
+    API->>DB: Run aggregate queries
+    activate DB
     DB-->>API: Result sets
-    API->>API: Stream rows as CSV
-    API-->>UI: Content-Disposition: attachment; filename=report_YYYYMMDD.csv
-    UI->>UI: Browser triggers file download
+    deactivate DB
+    Note over API: Stream rows as CSV
+    API-->>UI: "Content-Disposition: attachment"
+    deactivate API
+    Note right of UI: Browser triggers file download
 ```
 
 ### 4.3 Supervisor Orchestration Flow
