@@ -40,7 +40,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 1G
 
   frontend:
     image: ${DOCKER_REGISTRY}/aicm-frontend:latest
@@ -60,7 +60,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 32M
+          memory: 64M
 
   nginx:
     image: nginx:alpine

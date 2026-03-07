@@ -38,27 +38,27 @@ This diagram illustrates how the User, specific Agents, and Data layers interact
 
 ```mermaid
 graph TD
-    User("Category Manager") -->|"Chat / Actions"| FE("Frontend (Next.js)")
-    FE -->|"REST / SSE"| Gateway("API Gateway")
-    
+    User("Category Manager") -->|"Chat / Actions"| FE("Frontend (Vite/React SPA)")
+    FE -->|"REST / SSE"| Gateway("API Gateway (Go Gin :8080)")
+
     subgraph "Agentic Control Plane"
         Gateway --> Supervisor("Supervisor Agent")
-        
-        Supervisor -->|"Delegate"| Analyst("Analyst Agent (SQL)")
-        Supervisor -->|"Delegate"| Strategist("Strategist Agent (Reasoning)")
-        Supervisor -->|"Delegate"| Planner("Planner Agent (Action)")
-        Supervisor -->|"Delegate"| Liaison("Liaison Agent (Comm)")
-        
-        Analyst <--> Tools("Toolbox")
+
+        Supervisor -->|"Delegate"| Analyst("Analyst Agent (ReAct SQL)")
+        Supervisor -->|"Delegate"| Strategist("Strategist Agent (CoT)")
+        Supervisor -->|"Delegate"| Planner("Planner Agent (Human-in-Loop)")
+        Supervisor -->|"Delegate"| Liaison("Liaison Agent (Comm Drafts)")
+        Supervisor -->|"Delegate"| Watchdog("Watchdog Agent (Anomaly Detection)")
+        Supervisor --> Critic("Critic Layer (Reflection)")
+
+        Analyst <--> Tools("Toolbox: run_sql")
         Strategist <--> Tools
-        Planner <--> Tools
+        Watchdog <--> Tools
     end
-    
+
     subgraph "Data & Logic Layer"
-        Tools <--> DB[("Postgres DB")]
-        Tools <--> Vector[("Vector DB")]
-        Tools <--> Forecast("Forecast Service")
-        Tools <--> Ingest("Ingestion Service")
+        Tools <--> DB[("PostgreSQL + pgvector")]
+        Gateway <--> DB
     end
 ```
 
@@ -67,31 +67,37 @@ graph TD
 ## 3. unified Service Architecture
 
 ### 3.1 Services Breakdown
-The backend is composed of a unified monolithic Go service serving APIs and Websockets, while encapsulating specialized agent logic via Langchain-inspired patterns.
+The backend is composed of a unified monolithic Go service serving REST APIs and SSE streaming, while encapsulating specialized agent logic.
 
 ```mermaid
 graph TD
-    FE["Frontend (Next.js)"]
-    
+    FE["Frontend (Vite/React SPA)"]
+
     subgraph "Backend System"
-        Gateway["API Server (Gin)"]
-        AgentCore["Agent Supervisor (Go)"]
+        Gateway["API Server (Gin :8080)"]
+        AgentCore["Supervisor Agent (Go)"]
+        Cron["Distributed Cron Scheduler"]
     end
-    
+
     FE <-->|"REST / SSE"| Gateway
     Gateway <-->|"Context Delegation"| AgentCore
+    Cron -->|"Scheduled checks"| AgentCore
 ```
 
 ### 3.2 Key Application Components
 
-| Component Name | Language | Role | Inbound Protocol | Dependencies |
+| Component Name | Language | Role | Inbound | Dependencies |
 | :--- | :--- | :--- | :--- | :--- |
-| **API Server** | Go (Gin) | Traffic Entry, Rate Limiting, Routing, SSE Streaming. | HTTP/REST | All Services |
-| **Supervisor Agent** | Go | Delegates Chat Context to other worker agents and captures Episodic Memory via PgVector. | Internal API | Postgres (Users) |
-| **Analyst Agent** | Go | Translates Natural Language to SQL and retrieves accurate retail schema data (ReAct). | Internal API | Postgres, Vector DB |
-| **Watchdog Agent** | Go | A daemon/trigger agent that scans for internal business anomalies and saves to Alerts DB. | Internal API / Cron | Postgres |
-| **Planner Agent** | Go | Breaks down strategies into discrete UI-executable actions for the user dashboard. | Internal API | Postgres (Audit) |
-| **Strategist Agent** | Go | Provides long-form analytical responses using Chain of Thought processing over data context. | Internal API | LLM API |
+| **API Server** | Go (Gin) | Traffic entry, rate limiting, routing, SSE streaming | HTTP/REST | All agents |
+| **Supervisor Agent** | Go | Intent classification, orchestration, 3-tier memory enrichment, Critic post-processing | Internal | Postgres, pgvector, LLM |
+| **Analyst Agent** | Go | Text-to-SQL with ReAct loop (3 retries), 2-tier SQL cache | Internal | Postgres, pgvector, LLM |
+| **Strategist Agent** | Go | CoT insight generation with parallel SQL context gathering | Internal | Postgres, LLM |
+| **Planner Agent** | Go | LLM-generated action proposals → persisted to `action_log` (pending) | Internal | Postgres, LLM |
+| **Liaison Agent** | Go | Drafts emails, reports, alerts, summaries using prompt templates | Internal | LLM |
+| **Watchdog Agent** | Go | Rule-based anomaly detection (4 checks); saves alerts to DB; cron-triggered | Internal / Cron | Postgres |
+| **Critic Layer** | Go | Reflection: PII masking, hallucinated table detection, coherence checks | Internal | — |
+| **Recommender** | Go | Rule-based action generation from live DB data (no LLM) | Internal | Postgres |
+| **Cron Scheduler** | Go | Distributed DB-locked job scheduler (IntervalJob, DailyJob) | Internal | Postgres |
 
 ---
 
@@ -121,24 +127,28 @@ graph LR
 
 ```mermaid
 graph LR
-    Input["User Input"] --> Encoder["Embedding Encoder"]
-    Encoder --> Vector["Vector Search"]
-    
-    subgraph "Memory Store"
-        STM[("STM: Short-Term (Redis)\nSession Chat History")]
-        LTM_E[("LTM: Episodic (pgvector)\nPast Experiences")]
-        LTM_S[("LTM: Semantic (pgvector)\nBusiness Knowledge")]
+    Input["User Input"] --> Encoder["getEmbedding()\nBedrock Titan v1 (prod)\nor hash fallback (dev)"]
+    Encoder --> Vector["Cosine Similarity\n(pgvector <=> operator)"]
+
+    subgraph "Memory Store (all PostgreSQL)"
+        STM[("STM: chat_messages\nSession Chat History\n(last 10, no embedding)")]
+        LTM_E[("LTM Episodic: agent_memory\nmemory_type='episodic'\nPast Q/A pairs")]
+        LTM_S[("LTM Semantic: business_context\nBusiness Facts & Rules")]
+        SQL_CACHE[("SQL Cache: agent_memory\nmemory_type='sql_cache'\n24h TTL, threshold 0.92")]
     end
-    
+
     Vector --> LTM_E
     Vector --> LTM_S
-    
-    LTM_E -->|"Retrieve Past Plans"| ContextBuilder
-    LTM_S -->|"Retrieve Business Rules"| ContextBuilder
-    STM -->|"Retrieve Chat Context"| ContextBuilder
-    
-    ContextBuilder -->|"Enriched Prompt"| LLM
+    Vector --> SQL_CACHE
+
+    LTM_E -->|"top-3 similar past interactions"| ContextBuilder
+    LTM_S -->|"top-3 relevant facts"| ContextBuilder
+    STM -->|"last 10 messages"| ContextBuilder
+
+    ContextBuilder -->|"MemoryContext injected into Input"| Agent
 ```
+
+**All 3 tiers are fetched in parallel goroutines** sharing one pre-computed embedding. The SQL cache (L2) is used by the Analyst agent separately before LLM SQL generation.
 
 ---
 
@@ -239,39 +249,52 @@ graph TD
 ## 9. Code Repository Structure (Monorepo)
 ```text
 ai-cm/
-├── apps/
-│   ├── web/                    # Next.js Frontend
-│   │   ├── src/app/            # App Router
-│   │   ├── src/components/     # Shadcn UI
+├── src/
+│   ├── apps/web/               # Vite + React SPA (TypeScript)
+│   │   ├── src/app/            # Page components
+│   │   ├── src/components/     # Shared UI components
+│   │   ├── src/pages/          # Route pages
 │   │   └── package.json
-│
-├── backend/                    # Go Backend
-│   ├── cmd/                    # Entry points
-│   │   └── server/             # main.go
 │   │
-│   ├── internal/               # Private shared code
-│   │   ├── agent/              # Agent Logic (Supervisor, ReAct, RAG)
-│   │   ├── config/             # Configuration parsing
-│   │   ├── cron/               # Distributed scheduler
-│   │   ├── database/           # Postgres connection & models
-│   │   ├── handlers/           # REST API endpoints
-│   │   ├── llm/                # LLM Client implementations
-│   │   ├── logger/             # Structured logging
-│   │   ├── memory/             # Vector storage integration
-│   │   └── prompts/            # Template files
-│   ├── go.mod                  # Go module definition
+│   ├── backend/                # Go Backend (monolith)
+│   │   ├── cmd/server/         # main.go — server entry point
+│   │   └── internal/
+│   │       ├── agent/          # All agents + caches (supervisor, analyst, strategist,
+│   │       │                   #   planner, liaison, watchdog, critic, recommender,
+│   │       │                   #   sql_cache, schema_cache, result_cache, memory_context)
+│   │       ├── config/         # YAML + env config
+│   │       ├── cron/           # Distributed DB-locked scheduler
+│   │       ├── database/       # pgxpool connection setup
+│   │       ├── handlers/       # REST handlers (chat, actions, alerts,
+│   │       │                   #   dashboard, reports, graphql, suggestions, security)
+│   │       ├── llm/            # LLM clients (bedrock, gemini, openai, local/ollama)
+│   │       ├── logger/         # slog structured logging
+│   │       ├── memory/         # 3-tier memory (interface + PgStore implementation)
+│   │       └── prompts/        # Hot-reloadable prompt template loader
+│   │
+│   └── prompts/                # LLM system prompt .md files
+│       ├── analyst_sql.md
+│       ├── analyst_summary.md
+│       ├── strategist.md
+│       ├── planner.md
+│       ├── liaison_email.md / liaison_report.md / liaison_slack.md
+│       └── chat_suggestions.md
 │
-├── ml/                         # Python ML Services
-│   ├── forecasting/
-│   │   ├── app/                # FastAPI app
-│   │   └── models/             # Pickle files
-│   └── requirements.txt
+├── infra/
+│   ├── docker-compose.yml          # Local development
+│   ├── docker-compose.prod.yml     # Production (EC2 + RDS, no postgres container)
+│   ├── docker-compose.local-llm.yml # Adds Ollama service
+│   ├── Dockerfile.backend
+│   ├── Dockerfile.frontend         # Vite build → nginx:alpine (port 80)
+│   ├── nginx.conf                  # Reverse proxy
+│   └── postgres/                   # DB init scripts + seed data
 │
-├── infra/                      # Terraform / Docker Compose
-│   ├── docker-compose.yml
-│   └── postgres/               # Init scripts
+├── config/
+│   ├── config.prod.yaml
+│   └── config.local.yml
 │
-└── protos/                     # Raw Protocol Buffers
-    ├── agent.proto
-    └── auth.proto
+└── scripts/
+    ├── build.sh                    # Build + Docker push
+    ├── deploy.sh                   # Pull images + compose up
+    └── aws_startstop.sh            # EC2 + RDS start/stop
 ```

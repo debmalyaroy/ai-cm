@@ -18,8 +18,8 @@ This repository contains the complete design and implementation roadmap for AI-C
 
 | Artifact | Description |
 | :--- | :--- |
-| **[Product Requirements](docs/product_requirement.md)** | Detailed problem statement, user personas, use cases, and core capabilities. |
-| **[System Design](docs/design.md)** | Technical architecture (Monolith), Ingestion flows, and Logical Lakehouse strategy. |
+| **[Product Requirements](requirements.md)** | Detailed problem statement, user personas, use cases, and core capabilities. |
+| **[System Design](design.md)** | Technical architecture (Monolith), Ingestion flows, and Logical Lakehouse strategy. |
 | **[Agentic Architecture](docs/design_agent.md)** | **The Cognitive Core.** Detailed design of the Multi-Agent System (Supervisor, Analyst, Strategist, Planner). |
 | **[AWS Deployment Guide](docs/aws_deployment_guide.md)** | Full guide for deploying to AWS EC2 using Free Tier and Amazon Bedrock optimization. |
 | **[Low Level Design](docs/low_level_design.md)** | Modular Monolith boundaries, Data Flows, Sequence Diagrams, and Memory RAG pipeline. |
