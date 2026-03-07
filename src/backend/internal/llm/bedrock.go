@@ -248,6 +248,37 @@ func (b *BedrockClient) GenerateStream(ctx context.Context, systemPrompt, userPr
 	return ch, nil
 }
 
+// Embed implements the llm.Embedder interface using Amazon Titan Embed Text v1.
+// Titan v1 produces 1536-dimensional vectors — matches the vector(1536) DB schema.
+func (b *BedrockClient) Embed(ctx context.Context, text string) ([]float32, error) {
+	type titanEmbedRequest struct {
+		InputText string `json:"inputText"`
+	}
+	type titanEmbedResponse struct {
+		Embedding []float32 `json:"embedding"`
+	}
+
+	payload, err := json.Marshal(titanEmbedRequest{InputText: text})
+	if err != nil {
+		return nil, fmt.Errorf("titan embed marshal: %w", err)
+	}
+
+	out, err := b.client.InvokeModel(ctx, &bedrockruntime.InvokeModelInput{
+		ModelId:     aws.String("amazon.titan-embed-text-v1"),
+		ContentType: aws.String("application/json"),
+		Body:        payload,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("titan embed invoke: %w", err)
+	}
+
+	var res titanEmbedResponse
+	if err := json.Unmarshal(out.Body, &res); err != nil {
+		return nil, fmt.Errorf("titan embed unmarshal: %w", err)
+	}
+	return res.Embedding, nil
+}
+
 func (b *BedrockClient) Name() string {
 	return "aws_bedrock"
 }

@@ -166,6 +166,52 @@ func (l *LocalClient) GenerateStream(ctx context.Context, systemPrompt, userProm
 	return ch, nil
 }
 
+// Embed implements the llm.Embedder interface using Ollama's /api/embeddings endpoint.
+// The embedding dimension depends on the model (e.g. nomic-embed-text=768, mxbai-embed-large=1024).
+// NOTE: The DB schema uses vector(1536). If using a local embedding model, run the migration:
+//
+//	ALTER TABLE agent_memory ALTER COLUMN embedding TYPE vector(<dim>);
+//	ALTER TABLE business_context ALTER COLUMN embedding TYPE vector(<dim>);
+func (l *LocalClient) Embed(ctx context.Context, text string) ([]float32, error) {
+	embedURL := strings.Replace(l.url, "/api/generate", "/api/embeddings", 1)
+
+	type embedRequest struct {
+		Model  string `json:"model"`
+		Prompt string `json:"prompt"`
+	}
+	type embedResponse struct {
+		Embedding []float32 `json:"embedding"`
+	}
+
+	payload, err := json.Marshal(embedRequest{Model: l.model, Prompt: text})
+	if err != nil {
+		return nil, fmt.Errorf("local embed marshal: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", embedURL, bytes.NewBuffer(payload))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := l.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("local embed request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("local embed failed: %s %s", resp.Status, string(body))
+	}
+
+	var res embedResponse
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		return nil, fmt.Errorf("local embed decode: %w", err)
+	}
+	return res.Embedding, nil
+}
+
 func (l *LocalClient) Name() string {
 	return "local"
 }

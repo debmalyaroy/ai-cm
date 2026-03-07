@@ -37,6 +37,13 @@ type StreamChunk struct {
 	Error   error
 }
 
+// Embedder is an optional interface for providers that support text-to-vector embedding.
+// Check for support with: embedder, ok := client.(llm.Embedder)
+type Embedder interface {
+	// Embed converts text to a float32 vector for semantic similarity search.
+	Embed(ctx context.Context, text string) ([]float32, error)
+}
+
 // temperature reads from env or returns the config default.
 func temperature(cfg *cfgpkg.Config) float32 {
 	if v := os.Getenv("LLM_TEMPERATURE"); v != "" {

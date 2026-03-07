@@ -67,7 +67,9 @@ func NewSupervisorAgent(llmClient llm.Client, db *pgxpool.Pool, agentModels map[
 	return &SupervisorAgent{
 		llmClient:  llmClient,
 		intentLLM:  intentLLM,
-		analyst:    NewAnalystAgent(analystLLM, db, tools),
+		// mem is passed to agents so they can independently query/store memory.
+		// Analyst uses it for the vector SQL cache (L2) on top of its in-process L1 cache.
+		analyst:    NewAnalystAgent(analystLLM, db, tools, mem),
 		strategist: NewStrategistAgent(strategistLLM, db, tools),
 		planner:    NewPlannerAgent(db, plannerLLM),
 		liaison:    NewLiaisonAgent(liaisonLLM),

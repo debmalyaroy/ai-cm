@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/debmalyaroy/ai-cm/internal/llm"
+	"github.com/debmalyaroy/ai-cm/internal/memory"
 	"github.com/debmalyaroy/ai-cm/internal/prompts"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -19,18 +20,20 @@ type AnalystAgent struct {
 	llmClient   llm.Client
 	tools       *ToolSet
 	db          *pgxpool.Pool
-	sqlCache    *SQLCache
+	sqlCache    *SQLCache       // L1: in-process exact-match cache (bag-of-words key, fast)
 	schemaCache *SchemaCache
+	mem         memory.Manager  // L2: pgvector semantic SQL cache + shared agent memory
 }
 
 // NewAnalystAgent creates a new Analyst agent.
-func NewAnalystAgent(llmClient llm.Client, db *pgxpool.Pool, tools *ToolSet) *AnalystAgent {
+func NewAnalystAgent(llmClient llm.Client, db *pgxpool.Pool, tools *ToolSet, mem memory.Manager) *AnalystAgent {
 	return &AnalystAgent{
 		llmClient:   llmClient,
 		tools:       tools,
 		db:          db,
 		sqlCache:    NewSQLCache(15*time.Minute, 100),
 		schemaCache: NewSchemaCache(db, 30*time.Minute),
+		mem:         mem,
 	}
 }
 
@@ -63,9 +66,33 @@ func (a *AnalystAgent) Process(ctx context.Context, input *Input) (*Output, erro
 
 	slog.DebugContext(ctx, "Analyst: retrieved cached DB schema")
 
-	// Step 2: Check SQL cache before generating
+	// Step 2a: L2 — Vector SQL cache (semantic similarity via pgvector)
+	// Catches "Show revenue by region" when "Display sales per region" was previously answered.
+	if a.mem != nil {
+		if cachedSQL, found, err := a.mem.RetrieveSQL(ctx, input.Query, 0.92); found {
+			slog.DebugContext(ctx, "Analyst: vector SQL cache hit", "query", input.Query)
+			output.Reasoning = append(output.Reasoning, ReasoningStep{
+				Type:    "action",
+				Content: "Found semantically similar cached SQL from vector store",
+			})
+			sqlTool, _ := a.tools.Get("run_sql")
+			queryResult, execErr := sqlTool.Execute(ctx, map[string]any{"sql": cachedSQL})
+			if execErr == nil {
+				output.Reasoning = append(output.Reasoning, ReasoningStep{
+					Type:    "observation",
+					Content: "Vector-cached SQL executed successfully",
+				})
+				return a.summarizeResults(ctx, input, output, cachedSQL, queryResult)
+			}
+			slog.WarnContext(ctx, "Analyst: vector-cached SQL failed, falling through", "error", execErr)
+		} else if err != nil {
+			slog.WarnContext(ctx, "Analyst: vector SQL cache lookup failed (non-fatal)", "error", err)
+		}
+	}
+
+	// Step 2b: L1 — In-process exact-match cache (bag-of-words key, instant)
 	if cachedSQL, ok := a.sqlCache.Get(input.Query); ok {
-		slog.DebugContext(ctx, "Analyst: SQL cache hit", "query", input.Query)
+		slog.DebugContext(ctx, "Analyst: in-process SQL cache hit", "query", input.Query)
 		output.Reasoning = append(output.Reasoning, ReasoningStep{
 			Type:    "action",
 			Content: "Found cached SQL template for this query pattern",
@@ -181,8 +208,15 @@ func (a *AnalystAgent) Process(ctx context.Context, input *Input) (*Output, erro
 		return nil, fmt.Errorf("failed after %d attempts: %w", maxRetries, err)
 	}
 
-	// Cache the successful SQL for future queries with the same pattern
+	// Cache the successful SQL in both L1 (in-process) and L2 (vector store)
 	a.sqlCache.Put(input.Query, sqlQuery)
+	if a.mem != nil {
+		go func(q, sql string) {
+			if err := a.mem.StoreSQL(context.Background(), q, sql); err != nil {
+				slog.Warn("Analyst: failed to store SQL in vector cache", "error", err)
+			}
+		}(input.Query, sqlQuery)
+	}
 
 	return a.summarizeResults(ctx, input, output, sqlQuery, queryResult)
 }

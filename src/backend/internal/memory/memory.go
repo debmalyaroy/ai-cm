@@ -86,4 +86,14 @@ type Manager interface {
 
 	// BuildContext assembles an enriched context from all 3 memory tiers.
 	BuildContext(ctx context.Context, sessionID, query string) (*MemoryContext, error)
+
+	// --- SQL Cache: vector-backed SQL template cache ---
+
+	// StoreSQL saves a successful query→SQL mapping in agent_memory using its embedding.
+	// Stored with agent_type='analyst', memory_type='sql_cache'.
+	StoreSQL(ctx context.Context, queryText, sqlText string) error
+
+	// RetrieveSQL finds the semantically closest cached SQL template for a query.
+	// Returns the SQL string and true only when cosine similarity >= threshold (e.g. 0.92).
+	RetrieveSQL(ctx context.Context, queryText string, threshold float64) (sqlText string, found bool, err error)
 }
