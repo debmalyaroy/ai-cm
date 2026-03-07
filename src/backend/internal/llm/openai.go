@@ -14,6 +14,7 @@ type OpenAIClient struct {
 	client      *openai.Client
 	model       string
 	temperature float32
+	maxTokens   int // 0 = not set (API uses model default)
 }
 
 // NewOpenAIClient creates a new OpenAI LLM client.
@@ -49,11 +50,18 @@ func (o *OpenAIClient) WithModel(model string) Client {
 		client:      o.client,
 		model:       model,
 		temperature: o.temperature,
+		maxTokens:   o.maxTokens,
 	}
 }
 
+func (o *OpenAIClient) WithMaxTokens(n int) Client {
+	c := *o
+	c.maxTokens = n
+	return &c
+}
+
 func (o *OpenAIClient) Generate(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
-	resp, err := o.client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
+	req := openai.ChatCompletionRequest{
 		Model: o.model,
 		Messages: []openai.ChatCompletionMessage{
 			{Role: openai.ChatMessageRoleSystem, Content: systemPrompt},
@@ -61,7 +69,11 @@ func (o *OpenAIClient) Generate(ctx context.Context, systemPrompt, userPrompt st
 		},
 		Temperature: 0.0,
 		TopP:        0.95,
-	})
+	}
+	if o.maxTokens > 0 {
+		req.MaxTokens = o.maxTokens
+	}
+	resp, err := o.client.CreateChatCompletion(ctx, req)
 	if err != nil {
 		return "", fmt.Errorf("openai generate: %w", err)
 	}
@@ -74,7 +86,7 @@ func (o *OpenAIClient) Generate(ctx context.Context, systemPrompt, userPrompt st
 }
 
 func (o *OpenAIClient) GenerateStream(ctx context.Context, systemPrompt, userPrompt string) (<-chan StreamChunk, error) {
-	stream, err := o.client.CreateChatCompletionStream(ctx, openai.ChatCompletionRequest{
+	streamReq := openai.ChatCompletionRequest{
 		Model: o.model,
 		Messages: []openai.ChatCompletionMessage{
 			{Role: openai.ChatMessageRoleSystem, Content: systemPrompt},
@@ -83,7 +95,11 @@ func (o *OpenAIClient) GenerateStream(ctx context.Context, systemPrompt, userPro
 		Temperature: 0.0,
 		TopP:        0.95,
 		Stream:      true,
-	})
+	}
+	if o.maxTokens > 0 {
+		streamReq.MaxTokens = o.maxTokens
+	}
+	stream, err := o.client.CreateChatCompletionStream(ctx, streamReq)
 	if err != nil {
 		return nil, fmt.Errorf("openai stream: %w", err)
 	}

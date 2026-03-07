@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/debmalyaroy/ai-cm/internal/llm"
@@ -126,22 +127,33 @@ func (s *StrategistAgent) gatherContext(ctx context.Context, query string) map[s
 		return data
 	}
 
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
 	for key, sql := range queries {
-		// Check cache first
+		// Serve from cache without spawning a goroutine
 		if cached, ok := s.contextCache.Get(key); ok {
 			data[key] = cached
 			slog.DebugContext(ctx, "Strategist: context cache hit", "key", key)
 			continue
 		}
 
-		result, err := sqlTool.Execute(ctx, map[string]any{"sql": sql})
-		if err != nil {
-			slog.WarnContext(ctx, "Strategist context query failed", "query_key", key, "error", err)
-			continue
-		}
-		data[key] = result
-		s.contextCache.Put(key, result)
+		// Run independent DB queries in parallel
+		wg.Add(1)
+		go func(k, q string) {
+			defer wg.Done()
+			result, err := sqlTool.Execute(ctx, map[string]any{"sql": q})
+			if err != nil {
+				slog.WarnContext(ctx, "Strategist context query failed", "query_key", k, "error", err)
+				return
+			}
+			mu.Lock()
+			data[k] = result
+			s.contextCache.Put(k, result)
+			mu.Unlock()
+		}(key, sql)
 	}
 
+	wg.Wait()
 	return data
 }

@@ -19,6 +19,7 @@ type BedrockClient struct {
 	client      *bedrockruntime.Client
 	model       string
 	temperature float64
+	maxTokens   int
 }
 
 // LlamaRequest represents the Meta Llama API format
@@ -74,6 +75,7 @@ func NewBedrockClient(cfg *cfgpkg.Config) (*BedrockClient, error) {
 		client:      client,
 		model:       model,
 		temperature: float64(cfg.LLM.Temperature),
+		maxTokens:   4096,
 	}, nil
 }
 
@@ -81,18 +83,23 @@ func (b *BedrockClient) Generate(ctx context.Context, systemPrompt, userPrompt s
 	var payload []byte
 	var err error
 
+	genMaxTok := b.maxTokens
+	if genMaxTok <= 0 {
+		genMaxTok = 4096
+	}
+
 	if strings.Contains(strings.ToLower(b.model), "llama") {
 		prompt := fmt.Sprintf("<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n%s<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n%s<|eot_id|><|start_header_id|>assistant<|end_header_id|>", systemPrompt, userPrompt)
 		req := LlamaRequest{
 			Prompt:      prompt,
 			Temperature: b.temperature,
-			MaxGenLen:   4096,
+			MaxGenLen:   genMaxTok,
 		}
 		payload, err = json.Marshal(req)
 	} else {
 		req := ClaudeRequest{
 			AnthropicVersion: "bedrock-2023-05-31",
-			MaxTokens:        4096,
+			MaxTokens:        genMaxTok,
 			System:           systemPrompt,
 			Messages: []ClaudeMessage{
 				{
@@ -146,18 +153,23 @@ func (b *BedrockClient) GenerateStream(ctx context.Context, systemPrompt, userPr
 
 	isLlama := strings.Contains(strings.ToLower(b.model), "llama")
 
+	streamMaxTok := b.maxTokens
+	if streamMaxTok <= 0 {
+		streamMaxTok = 4096
+	}
+
 	if isLlama {
 		prompt := fmt.Sprintf("<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n%s<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n%s<|eot_id|><|start_header_id|>assistant<|end_header_id|>", systemPrompt, userPrompt)
 		req := LlamaRequest{
 			Prompt:      prompt,
 			Temperature: b.temperature,
-			MaxGenLen:   4096,
+			MaxGenLen:   streamMaxTok,
 		}
 		payload, err = json.Marshal(req)
 	} else {
 		req := ClaudeRequest{
 			AnthropicVersion: "bedrock-2023-05-31",
-			MaxTokens:        4096,
+			MaxTokens:        streamMaxTok,
 			System:           systemPrompt,
 			Messages: []ClaudeMessage{
 				{
@@ -248,5 +260,12 @@ func (b *BedrockClient) WithModel(model string) Client {
 		client:      b.client,
 		model:       model,
 		temperature: b.temperature,
+		maxTokens:   b.maxTokens,
 	}
+}
+
+func (b *BedrockClient) WithMaxTokens(n int) Client {
+	c := *b
+	c.maxTokens = n
+	return &c
 }

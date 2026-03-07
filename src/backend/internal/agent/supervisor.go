@@ -122,6 +122,7 @@ func (s *SupervisorAgent) Process(ctx context.Context, input *Input) (*Output, e
 		}
 		output.Response = analystOutput.Response
 		output.Data = analystOutput.Data
+		output.AgentName = analystOutput.AgentName
 		output.Reasoning = append(output.Reasoning, analystOutput.Reasoning...)
 
 	case IntentInsight:
@@ -158,6 +159,7 @@ func (s *SupervisorAgent) Process(ctx context.Context, input *Input) (*Output, e
 		}
 
 		output.Response = strategistOutput.Response
+		output.AgentName = strategistOutput.AgentName
 		if analystOutput != nil {
 			output.Data = analystOutput.Data
 		}
@@ -177,6 +179,7 @@ func (s *SupervisorAgent) Process(ctx context.Context, input *Input) (*Output, e
 		}
 		output.Response = plannerOutput.Response
 		output.Actions = plannerOutput.Actions
+		output.AgentName = plannerOutput.AgentName
 		output.Reasoning = append(output.Reasoning, plannerOutput.Reasoning...)
 
 	case IntentCommunicate:
@@ -192,6 +195,7 @@ func (s *SupervisorAgent) Process(ctx context.Context, input *Input) (*Output, e
 			return nil, fmt.Errorf("liaison error: %w", err)
 		}
 		output.Response = liaisonOutput.Response
+		output.AgentName = liaisonOutput.AgentName
 		output.Reasoning = append(output.Reasoning, liaisonOutput.Reasoning...)
 
 	case IntentMonitor:
@@ -208,6 +212,7 @@ func (s *SupervisorAgent) Process(ctx context.Context, input *Input) (*Output, e
 		}
 		output.Response = watchdogOutput.Response
 		output.Data = watchdogOutput.Data
+		output.AgentName = watchdogOutput.AgentName
 		output.Reasoning = append(output.Reasoning, watchdogOutput.Reasoning...)
 
 	case IntentGeneral:
@@ -274,15 +279,36 @@ func (s *SupervisorAgent) classifyWithLLM(ctx context.Context, query string) (In
 	timeoutCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
-	systemPrompt := "You are an intent classifier. Respond with exactly ONE word from: query, insight, plan, communicate, monitor, general"
-	userPrompt := "Classify this request: " + query
+	systemPrompt := `You are an intent classifier. Reply with ONLY one word from this list: query, insight, plan, communicate, monitor, general
 
-	resp, err := s.intentLLM.Generate(timeoutCtx, systemPrompt, userPrompt)
+Examples:
+- "Show me sales by region" → query
+- "What are the top selling products?" → query
+- "Why did margins drop in East India?" → insight
+- "Analyze the sales trend" → insight
+- "Propose a promotional plan" → plan
+- "What actions should I take?" → plan
+- "Draft an email to the supplier" → communicate
+- "Check for anomalies" → monitor
+- "Is everything healthy?" → monitor
+- "Hello, what can you do?" → general`
+	userPrompt := "Classify this request (reply with ONE word only): " + query
+
+	// Intent only needs one word — cap tokens to avoid the model rambling
+	resp, err := s.intentLLM.WithMaxTokens(20).Generate(timeoutCtx, systemPrompt, userPrompt)
 	if err != nil {
 		return IntentGeneral, err
 	}
 
-	switch strings.TrimSpace(strings.ToLower(resp)) {
+	// Strip any punctuation/extra chars the model may add
+	cleaned := strings.TrimSpace(strings.ToLower(resp))
+	cleaned = strings.Trim(cleaned, ".,!?\"'`→:-")
+	// Extract the first word in case the model added explanation
+	if idx := strings.IndexAny(cleaned, " \t\n"); idx > 0 {
+		cleaned = cleaned[:idx]
+	}
+
+	switch cleaned {
 	case "query":
 		return IntentQuery, nil
 	case "insight":
@@ -311,8 +337,8 @@ func (s *SupervisorAgent) classifyWithHeuristics(_ context.Context, query string
 		}
 	}
 
-	// Monitoring patterns
-	monitorPatterns := []string{"anomal", "alert", "health", "check system", "watchdog", "monitor", "status"}
+	// Monitoring patterns — keep specific to avoid false positives on "alert", "status"
+	monitorPatterns := []string{"anomal", "watchdog", "monitor", "system health", "health check", "check system", "system status"}
 	for _, p := range monitorPatterns {
 		if strings.Contains(lower, p) {
 			return IntentMonitor

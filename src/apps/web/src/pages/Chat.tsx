@@ -23,7 +23,7 @@ export default function ChatPage() {
     const [isLoading, setIsLoading] = useState(false);
     const [sessionId, setSessionId] = useState<string | null>(null);
     const [status, setStatus] = useState("");
-    const [isDark, setIsDark] = useState(false);
+    const [isDark, setIsDark] = useState(() => localStorage.getItem("aicm-theme") !== "light");
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const abortRef = useRef<AbortController | null>(null);
 

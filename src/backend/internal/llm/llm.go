@@ -21,6 +21,11 @@ type Client interface {
 	// This allows agent-specific model routing for cost/performance optimization.
 	WithModel(model string) Client
 
+	// WithMaxTokens returns a new client instance that caps output to n tokens.
+	// Use this for calls needing short responses (e.g., intent classification, suggestions).
+	// Pass 0 to use the provider/model default.
+	WithMaxTokens(n int) Client
+
 	// Name returns the provider name.
 	Name() string
 }

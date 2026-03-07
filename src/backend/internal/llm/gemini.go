@@ -14,6 +14,7 @@ type GeminiClient struct {
 	client      *genai.Client
 	model       string
 	temperature float32
+	maxTokens   int32 // 0 = not set (model default)
 }
 
 // NewGeminiClient creates a new Gemini LLM client.
@@ -53,7 +54,14 @@ func (g *GeminiClient) WithModel(model string) Client {
 		client:      g.client,
 		model:       model,
 		temperature: g.temperature,
+		maxTokens:   g.maxTokens,
 	}
+}
+
+func (g *GeminiClient) WithMaxTokens(n int) Client {
+	c := *g
+	c.maxTokens = int32(n)
+	return &c
 }
 
 func (g *GeminiClient) Generate(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
@@ -61,6 +69,9 @@ func (g *GeminiClient) Generate(ctx context.Context, systemPrompt, userPrompt st
 	model.SystemInstruction = genai.NewUserContent(genai.Text(systemPrompt))
 	model.SetTemperature(0.0)
 	model.SetTopP(0.95)
+	if g.maxTokens > 0 {
+		model.SetMaxOutputTokens(g.maxTokens)
+	}
 
 	resp, err := model.GenerateContent(ctx, genai.Text(userPrompt))
 	if err != nil {
@@ -86,6 +97,9 @@ func (g *GeminiClient) GenerateStream(ctx context.Context, systemPrompt, userPro
 	model.SystemInstruction = genai.NewUserContent(genai.Text(systemPrompt))
 	model.SetTemperature(0.0)
 	model.SetTopP(0.95)
+	if g.maxTokens > 0 {
+		model.SetMaxOutputTokens(g.maxTokens)
+	}
 
 	iter := model.GenerateContentStream(ctx, genai.Text(userPrompt))
 

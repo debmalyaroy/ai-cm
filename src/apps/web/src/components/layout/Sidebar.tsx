@@ -15,7 +15,7 @@ const navItems = [
 export default function Sidebar() {
     const location = useLocation();
     const pathname = location.pathname;
-    const [isDark, setIsDark] = useState(true);
+    const [isDark, setIsDark] = useState(() => localStorage.getItem("aicm-theme") !== "light");
     const [collapsed, setCollapsed] = useState(false);
 
     useEffect(() => {
@@ -23,6 +23,8 @@ export default function Sidebar() {
         if (saved === "light") {
             setIsDark(false);
             document.documentElement.classList.remove("dark");
+        } else {
+            document.documentElement.classList.add("dark");
         }
         const savedCollapse = localStorage.getItem("aicm-sidebar-collapsed");
         if (savedCollapse === "true") setCollapsed(true);

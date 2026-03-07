@@ -15,9 +15,10 @@ import (
 )
 
 type LocalClient struct {
-	url    string
-	model  string
-	client *http.Client
+	url       string
+	model     string
+	client    *http.Client
+	maxTokens int // 0 = unlimited (Ollama default)
 }
 
 type LocalRequest struct {
@@ -52,12 +53,16 @@ func NewLocalClient(cfg *cfgpkg.Config) (*LocalClient, error) {
 }
 
 func (l *LocalClient) Generate(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
+	opts := map[string]any{"temperature": 0.0}
+	if l.maxTokens > 0 {
+		opts["num_predict"] = l.maxTokens
+	}
 	reqBody := LocalRequest{
 		Model:   l.model,
 		Prompt:  userPrompt,
 		System:  systemPrompt,
 		Stream:  false,
-		Options: map[string]any{"temperature": 0.0},
+		Options: opts,
 	}
 
 	payload, err := json.Marshal(reqBody)
@@ -93,12 +98,16 @@ func (l *LocalClient) Generate(ctx context.Context, systemPrompt, userPrompt str
 func (l *LocalClient) GenerateStream(ctx context.Context, systemPrompt, userPrompt string) (<-chan StreamChunk, error) {
 	ch := make(chan StreamChunk)
 
+	streamOpts := map[string]any{"temperature": 0.0}
+	if l.maxTokens > 0 {
+		streamOpts["num_predict"] = l.maxTokens
+	}
 	reqBody := LocalRequest{
 		Model:   l.model,
 		Prompt:  userPrompt,
 		System:  systemPrompt,
 		Stream:  true,
-		Options: map[string]any{"temperature": 0.0},
+		Options: streamOpts,
 	}
 
 	payload, err := json.Marshal(reqBody)
@@ -167,8 +176,15 @@ func (l *LocalClient) WithModel(model string) Client {
 		return l
 	}
 	return &LocalClient{
-		url:    l.url,
-		model:  model,
-		client: l.client,
+		url:       l.url,
+		model:     model,
+		client:    l.client,
+		maxTokens: l.maxTokens,
 	}
+}
+
+func (l *LocalClient) WithMaxTokens(n int) Client {
+	c := *l
+	c.maxTokens = n
+	return &c
 }

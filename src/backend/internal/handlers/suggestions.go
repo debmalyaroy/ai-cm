@@ -18,7 +18,7 @@ import (
 func generateSuggestions(agentName, question, response string, llmClient llm.Client) []map[string]interface{} {
 	suggestPrompt := prompts.Get("chat_suggestions.md")
 	if suggestPrompt != "" {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
 
 		snippet := response
@@ -27,8 +27,9 @@ func generateSuggestions(agentName, question, response string, llmClient llm.Cli
 		}
 		userText := fmt.Sprintf("User question: %s\n\nAssistant response: %s", question, snippet)
 
+		// Suggestions are a short JSON array — cap tokens to reduce latency
 		slog.DebugContext(ctx, "Generating follow-up suggestions", "agent", agentName)
-		result, err := llmClient.Generate(ctx, suggestPrompt, userText)
+		result, err := llmClient.WithMaxTokens(800).Generate(ctx, suggestPrompt, userText)
 		if err != nil {
 			slog.WarnContext(ctx, "generateSuggestions: LLM failed, using fallback", "agent", agentName, "error", err)
 		} else if suggestions := parseSuggestionsJSON(result); suggestions != nil {

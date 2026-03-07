@@ -172,7 +172,7 @@ func handleChat(db *pgxpool.Pool, supervisor *agent.SupervisorAgent, llmClient l
 			}
 		}(sessionID, req.Message, output.Response, output.AgentName)
 
-		// Generate and send follow-up suggestions synchronously after the answer is complete.
+		// Generate follow-up suggestions based on the full response (sequential — depends on response content)
 		suggestions := generateSuggestions(output.AgentName, req.Message, output.Response, llmClient)
 		sendSSE(c.Writer, "suggestions", map[string]interface{}{"questions": suggestions})
 
