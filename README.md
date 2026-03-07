@@ -19,10 +19,11 @@ This repository contains the complete design and implementation roadmap for AI-C
 | Artifact | Description |
 | :--- | :--- |
 | **[Product Requirements](requirements.md)** | Detailed problem statement, user personas, use cases, and core capabilities. |
-| **[System Design](design.md)** | Technical architecture (Monolith), Ingestion flows, and Logical Lakehouse strategy. |
+| **[System Design](plan/design.md)** | Initial design document: technical architecture intent, agent interfaces, Logical Lakehouse strategy. Some sections are aspirational. See LLD for current implementation. |
 | **[Agentic Architecture](docs/design_agent.md)** | **The Cognitive Core.** Detailed design of the Multi-Agent System (Supervisor, Analyst, Strategist, Planner). |
-| **[AWS Deployment Guide](docs/aws_deployment_guide.md)** | Full guide for deploying to AWS EC2 using Free Tier and Amazon Bedrock optimization. |
-| **[Low Level Design](docs/low_level_design.md)** | Modular Monolith boundaries, Data Flows, Sequence Diagrams, and Memory RAG pipeline. |
+| **[AWS Deployment Guide](docs/aws_deployment_guide.md)** | Deploy to AWS Free Tier (EC2 + RDS + Bedrock). Includes Windows-specific PuTTY / PSCP instructions, model selection analysis (Llama, Mistral, Qwen, DeepSeek, OpenAI), and cost estimates. |
+| **[How to Run Locally](docs/HOW_TO_RUN_LOCALLY.md)** | Run the full stack locally with Docker (Ollama or Bedrock profiles). |
+| **[Low Level Design](docs/low_level_design.md)** | Modular Monolith boundaries, Data Flows, Sequence Diagrams, Memory RAG pipeline, and AWS production deployment architecture (EC2 + RDS + Bedrock, multi-arch Docker build). |
 
 ---
 
@@ -110,7 +111,7 @@ The application uses centralized config files in `config/config.local.llm.yaml` 
 ### Core Configuration Parameters
 - **`server.port`**: API binding port (default `8080`).
 - **`database.url`**: Primary pgxpool connection string. Auto-injected via docker-compose.
-- **`llm.provider`**: Target LLM router (`aws`, `gemini`, `openai`, `local`). Supports **Agent-Specific Routing** via `llm.agent_models` dict (e.g., routing Analyst queries to Claude 3.5 Sonnet and Strategist queries to Claude 3 Haiku to save costs).
+- **`llm.provider`**: Target LLM router (`aws` for Amazon Bedrock, `local` for Ollama). **Production uses `aws` with Meta Llama 3.1 70B Instruct** (`us.meta.llama3-1-70b-instruct-v1:0`) via cross-region inference to us-east-1 at ~$0.72/MTok. Supports **Agent-Specific Routing** via `llm.agents` dict to assign different models per agent.
 - **`security.rate_limit_enabled`**: Backend IP-based rate limiting (Defaults to `true` at `30` requests per minute to prevent LLM credit abuse).
 - **`cors.allow_origins`**: Explicit frontend origin allowlist to lock down the proxy API.
 

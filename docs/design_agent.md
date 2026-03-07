@@ -60,6 +60,17 @@ graph TD
         Tools <--> DB[("PostgreSQL + pgvector")]
         Gateway <--> DB
     end
+
+    subgraph "LLM Providers"
+        Bedrock["Amazon Bedrock\nMeta Llama 3.1 70B (production)\nus.meta.llama3-1-70b-instruct-v1:0"]
+        Ollama["Local Ollama\nllama3.2 / tinyllama (dev)"]
+    end
+
+    Analyst <--> Bedrock
+    Strategist <--> Bedrock
+    Planner <--> Bedrock
+    Liaison <--> Bedrock
+    Supervisor <--> Bedrock
 ```
 
 ---
@@ -104,18 +115,17 @@ graph TD
 ## 4. Ingestion Layer Architecture
 **Goal:** Ingest data and alert on anomalies.
 
-### 4.1 Ingestion Flow & Watchdog
+> **Current Implementation Note:** The current system seeds data via SQL scripts in `infra/postgres/` (157K+ sales rows, 200 products, 6000 inventory rows). A file-based ingestion pipeline (S3/MinIO) is an aspirational future enhancement. The Watchdog agent queries the live database directly rather than polling a metadata store.
+
+### 4.1 Ingestion Flow & Watchdog (Current Implementation)
 
 ```mermaid
 graph LR
-    Source["Data Source"] -->|"Upload"| S3[("S3 Raw")]
-    S3 -->|"Event"| IngestSvc["Ingestion Service"]
-    
-    IngestSvc -->|"Clean Data"| DB[("Postgres")]
-    IngestSvc -->|"Log Metadata"| MetaStore[("Metadata DB")]
-    
-    Watchdog["Watchdog Agent"] -.->|"Polls"| MetaStore
-    Watchdog -->|"Alert: Schema Drift"| Supervisor["Supervisor Agent"]
+    Scripts["SQL Seed Scripts\n(infra/postgres/*.sql)"] -->|"Init container"| DB[("PostgreSQL\nfact_sales, fact_inventory\nfact_competitor_prices")]
+
+    Cron["Distributed Cron Scheduler\n(every 5 min / 08:00 daily)"] -->|"Trigger"| Watchdog["Watchdog Agent"]
+    Watchdog -->|"Rule-based checks\nprice/stock/sales anomalies"| DB
+    Watchdog -->|"INSERT INTO alerts"| DB
 ```
 
 ---
@@ -167,8 +177,7 @@ graph TD
     EmbedQuery --> Search
     VectorDB -->|"Matches"| Search
     
-    Search --> ReRanking["Cross-Encoder Rerank"]
-    ReRanking -->|"Top-K Context"| Agent
+    Search -->|"Top-3 by cosine similarity"| Agent
 ```
 
 ---
@@ -177,7 +186,7 @@ graph TD
 **Pattern:** We use a **Supervisor-Worker** pattern. The Supervisor prevents direct Peer-to-Peer chaos.
 
 ### 7.1 Protocol & Flow
-*   **Protocol:** Structured JSON over Go Channels (if in-process) or gRPC (if distributed).
+*   **Protocol:** Direct Go function calls (in-process). All agents run within the same Go binary. The Supervisor calls agents synchronously and passes a shared `context.Context`; results are returned as typed structs.
 
 ```mermaid
 graph TD
@@ -281,20 +290,25 @@ ai-cm/
 │       └── chat_suggestions.md
 │
 ├── infra/
-│   ├── docker-compose.yml          # Local development
-│   ├── docker-compose.prod.yml     # Production (EC2 + RDS, no postgres container)
-│   ├── docker-compose.local-llm.yml # Adds Ollama service
-│   ├── Dockerfile.backend
-│   ├── Dockerfile.frontend         # Vite build → nginx:alpine (port 80)
-│   ├── nginx.conf                  # Reverse proxy
-│   └── postgres/                   # DB init scripts + seed data
+│   ├── docker-compose.yml              # Base compose (shared services)
+│   ├── docker-compose.local-llm.yml    # Local dev with Ollama GPU container
+│   ├── docker-compose.bedrock.yml      # Local dev routing LLM to AWS Bedrock
+│   ├── docker-compose.prod.yml         # Production (EC2 + RDS, no postgres container)
+│   ├── Dockerfile.backend              # Multi-arch Go binary (linux/amd64 + linux/arm64)
+│   ├── Dockerfile.frontend             # Vite build → nginx:alpine (port 80, static SPA)
+│   ├── nginx.conf                      # Reverse proxy (/api/* → backend, / → frontend)
+│   └── postgres/                       # DB init scripts + seed data (157K+ rows)
 │
 ├── config/
-│   ├── config.prod.yaml
-│   └── config.local.yml
+│   ├── config.prod.yaml                # Production config (Bedrock, RDS, rate limiting)
+│   ├── config.local.llm.yaml           # Local Ollama config
+│   └── config.local.bedrock.yaml       # Local Bedrock config
 │
 └── scripts/
-    ├── build.sh                    # Build + Docker push
-    ├── deploy.sh                   # Pull images + compose up
-    └── aws_startstop.sh            # EC2 + RDS start/stop
+    ├── build.sh / build.ps1            # Multi-arch Docker build + push (linux/amd64,arm64)
+    ├── run.sh / run.ps1                # Start local stack (local_llm or bedrock profile)
+    ├── shutdown.sh / shutdown.ps1      # Graceful teardown
+    ├── deploy.sh / deploy.ps1          # Pull DockerHub images + compose up on EC2
+    ├── aws_deploy.sh                   # EC2 bootstrap (installs Docker, creates swap, seeds DB)
+    └── aws_startstop.sh / .ps1         # Start/stop EC2 + RDS (cost control)
 ```

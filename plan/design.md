@@ -1,5 +1,9 @@
 # Design Document: AI Category Manager - Agentic Decision Intelligence Platform
 
+> **Note:** This document captures the **initial system design and architectural intent** for AI-CM. Some sections (microservices architecture, S3/MinIO ingestion, Python forecasting service, gRPC inter-service communication) describe aspirational future capabilities that are not yet implemented. The actual production implementation is a **modular Go monolith** running on AWS EC2 + RDS. For the current implementation details, refer to:
+> - **[Agentic Architecture (actual)](design_agent.md)** — Cognitive layer, agent patterns, actual repo structure
+> - **[Low Level Design (actual)](low_level_design.md)** — Sequence diagrams, REST API map, AWS deployment, multi-arch build pipeline
+
 ## Overview
 
 The AI Category Manager (AI-CM) is an **Agentic Decision Intelligence Platform** that transforms category management from reactive analysis to proactive decision intelligence. Unlike traditional chatbots or dashboards, AI-CM employs a **Multi-Agent System** where specialized AI agents collaborate to provide autonomous category management capabilities.

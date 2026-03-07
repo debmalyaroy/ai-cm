@@ -142,7 +142,7 @@ The core controller located at `src/backend/internal/agent/supervisor.go`.
 - Supports two execution modes: **interval checks** (every 5 minutes) and **time-based daily alerts** (at 08:00 AM) via the scheduler.
 
 ### 3.3 Analyst (Data Retrieval & Text-to-SQL)
-- High-reasoning agent utilizing the smartest configured model (e.g., `gpt-4o` or `claude-3-5-sonnet`).
+- High-reasoning agent utilizing the configured production model (`us.meta.llama3-1-70b-instruct-v1:0` via Amazon Bedrock; `llama3.2` locally via Ollama).
 - Executes a **ReAct loop (max 3 retries)**. If a generated SQL query fails, the database error and the exact failing SQL query are passed *back* into the LLM context to self-correct hallucinated schemas or syntax errors.
 - Strict read-only output enforcement.
 
@@ -616,3 +616,144 @@ Rather than blindly stuffing conversational arrays back into the LLM context lim
 - **API Key Auth**: Secured via custom Gin middleware leveraging `API_KEYS` env variable. Bearer Token required for programmatic API consumption.
 - **Rate Limiting**: IP-based rate limiting via `x/time/rate`, restricting endpoint spam (`RATE_LIMIT_PER_MINUTE`).
 - **Postgres RBAC**: The LLM queries data using a restricted logical user (`aicm`) to eliminate SQL injection threat risks for destructive operations.
+
+
+## 10. AWS Production Deployment Architecture
+
+### 10.1 Infrastructure Overview
+
+The production deployment runs entirely on AWS using Graviton2 (ARM64) instances. All application containers run on a single EC2 node; the database is managed by RDS. LLM inference is offloaded to Amazon Bedrock in `us-east-1` via cross-region inference profiles.
+
+```mermaid
+graph TD
+    subgraph Internet
+        User[/"Browser / API Client"/]
+        GH["GitHub (master branch push)"]
+    end
+
+    subgraph CI ["GitHub Actions CI (ubuntu-latest, x86_64)"]
+        CI_Build["build.sh all -t prod\n(docker buildx, linux/amd64+arm64)"]
+        CI_Push["Push multi-arch manifest\nto DockerHub"]
+    end
+
+    subgraph DockerHub ["DockerHub Registry"]
+        DH_Back["debmalyaroy/aicm-backend:latest\n(multi-arch: amd64 + arm64)"]
+        DH_Front["debmalyaroy/aicm-frontend:latest\n(multi-arch: amd64 + arm64)"]
+    end
+
+    subgraph AWS_Mumbai ["AWS ap-south-1 (Mumbai)"]
+        EIP["Elastic IP\n13.126.208.105"]
+
+        subgraph EC2 ["EC2 t4g.small (ARM64 Graviton2, 2vCPU/2GB)\naicm-server | i-043b1989c56cc1cd3"]
+            NGINX["nginx container\n:80 → backend :8080 / frontend"]
+            BE["aicm-backend container\n:8080 (Go Gin API)"]
+            FE["aicm-frontend container\n(Vite/React static via nginx)"]
+            DOZZLE["Dozzle container\n:4567 (log viewer)"]
+        end
+
+        subgraph RDS ["RDS db.t4g.micro (ARM64 Graviton2)\naicm-postgres | PostgreSQL 16, 20GB gp3"]
+            PG[("PostgreSQL\n+ pgvector")]
+        end
+
+        subgraph VPC ["VPC ai-cm-vpc-vpc (10.0.0.0/16)"]
+            SG_EC2["aicm-ec2-sg\n:80 public, :22 SSH"]
+            SG_RDS["ec2-rds-1 / rds-ec2-1\n(linked SG pair, port 5432)"]
+        end
+
+        CW["CloudWatch Logs\n/aicm/docker"]
+    end
+
+    subgraph AWS_Virginia ["AWS us-east-1 (Virginia)"]
+        Bedrock["Amazon Bedrock\nMeta Llama 3.1 70B\nus.meta.llama3-1-70b-instruct-v1:0"]
+    end
+
+    GH -->|"on push to master"| CI_Build
+    CI_Build --> CI_Push
+    CI_Push --> DH_Back
+    CI_Push --> DH_Front
+
+    User -->|"HTTP :80"| EIP
+    EIP --> SG_EC2
+    SG_EC2 --> NGINX
+    NGINX --> BE
+    NGINX --> FE
+
+    BE -->|"docker pull arm64 variant"| DH_Back
+    FE -->|"docker pull arm64 variant"| DH_Front
+
+    BE -->|"pgxpool (SSL, port 5432)"| SG_RDS
+    SG_RDS --> PG
+
+    BE -->|"Bedrock InvokeModelWithResponseStream\n(IAM role: aicm-ec2-role)"| Bedrock
+    BE -->|"CloudWatch agent logs"| CW
+```
+
+### 10.2 Two-Region Setup
+
+The deployment intentionally spans two AWS regions for different purposes:
+
+| Region | Services | Config Key |
+|---|---|---|
+| `ap-south-1` (Mumbai) | EC2, RDS, VPC, CloudWatch | `AWS_REGION` in `.env [prod.aws]` |
+| `us-east-1` (Virginia) | Amazon Bedrock (Llama models) | `llm.aws_region` in `config/config.prod.yaml` |
+
+The EC2 instance's IAM role (`aicm-ec2-role`) carries `bedrock:InvokeModel` permission scoped to the specific Llama 3.1 70B foundation model ARN in `us-east-1`. No static credentials are stored on the instance.
+
+### 10.3 Multi-Arch Docker Build Pipeline
+
+The CI job (`ci.yml`) runs on GitHub-hosted `ubuntu-latest` (x86_64) but **produces images for both `linux/amd64` and `linux/arm64`** using Docker Buildx with the `docker-container` driver.
+
+```
+build.sh all -t prod
+  └─ docker buildx build --platform linux/amd64,linux/arm64
+        ├─ infra/Dockerfile.backend  →  debmalyaroy/aicm-backend:latest
+        └─ infra/Dockerfile.frontend →  debmalyaroy/aicm-frontend:latest
+```
+
+Both images are pushed as a **multi-arch manifest** to DockerHub. When the EC2 instance (`t4g.small`, ARM64) runs `docker pull`, the Docker daemon automatically selects the `linux/arm64` layer from the manifest — no manual platform flag is needed on the server.
+
+The Go backend binary is also cross-compiled for both architectures in the same build step:
+```bash
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o bin/aicm-server-amd64 ./cmd/server
+CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o bin/aicm-server-arm64 ./cmd/server
+```
+
+> **Local builds** (`build.sh docker` without `-t prod`) build only the native host architecture and load the image into the local Docker daemon. Multi-arch push always requires `-t prod` and valid DockerHub credentials.
+
+### 10.4 Security Groups
+
+Four security groups control network access:
+
+| SG Name | Attached To | Inbound Rules | Purpose |
+|---|---|---|---|
+| `aicm-ec2-sg` | EC2 | `:80` (0.0.0.0/0), `:22` SSH (0.0.0.0/0) | Public HTTP + SSH access |
+| `ec2-rds-1` | EC2 | — | Outbound side of EC2↔RDS linked pair |
+| `rds-ec2-1` | RDS | `:5432` from `ec2-rds-1` | RDS accepts connections from EC2 only |
+| `aicm-rds-sg` | RDS | `:5432` from local IP (temp) | Added during initial DB seed; remove after setup |
+
+> The `ec2-rds-1` / `rds-ec2-1` linked pair is created automatically by the RDS Console **"Set up EC2 connection"** wizard — no manual SG rule authoring required.
+
+### 10.5 Deployment Flow (Updating Production)
+
+```mermaid
+sequenceDiagram
+    participant Dev as Developer (Windows)
+    participant GH as GitHub
+    participant CI as GitHub Actions CI
+    participant DH as DockerHub
+    participant EC2 as EC2 (SSH via PuTTY)
+
+    Dev->>GH: git push origin master
+    GH->>CI: Trigger CI workflow (ubuntu-latest)
+    CI->>CI: go test ./internal/... (unit tests)
+    CI->>CI: golangci-lint
+    CI->>CI: build.sh all -t prod
+    Note over CI: docker buildx linux/amd64+arm64
+    CI->>DH: Push aicm-backend:latest (multi-arch)
+    CI->>DH: Push aicm-frontend:latest (multi-arch)
+
+    Dev->>EC2: SSH via PuTTY (key: aicm-server.ppk)
+    EC2->>DH: docker compose pull (arm64 variant auto-selected)
+    EC2->>EC2: docker compose -f docker-compose.prod.yml up -d
+    EC2-->>Dev: Containers running; verify via Dozzle :4567
+```

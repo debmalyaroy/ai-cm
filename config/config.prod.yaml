@@ -19,34 +19,35 @@ database:
 llm:
   provider: "aws" # Use Amazon Bedrock for production
   temperature: 0.0 # Deterministic outputs for data analysis & SQL generation
-  aws_region: "us-east-1" # Mumbai — broader APAC model support than Hyderabad (ap-south-2)
-  # Global fallback model — used if an agent has no specific entry in agent_models.
+  # Bedrock API region — Meta Llama models are hosted in us-east-1.
+  # EC2 and RDS infrastructure are in ap-south-1 (Mumbai); that is set in .env [prod.aws] AWS_REGION.
+  # These are two separate region settings for different purposes.
+  aws_region: "us-east-1"
+  # Global fallback model — used if an agent has no specific entry in agents below.
+  # us.meta.llama3-1-70b-instruct-v1:0 is a cross-region inference profile (ap-south-1 → us-east-1).
+  # Cost: $0.72/MTok input and $0.72/MTok output — ~14x cheaper than Claude 3.5 Sonnet.
   aws_model: "us.meta.llama3-1-70b-instruct-v1:0"
 
-  # Agent-Specific Model Routing: balance capability vs. cost per task type.
-  #
-  # Cost reference (us-east-1, per million tokens, input/output):
-  #   Claude 3 Haiku:      $0.25 / $1.25   # Map each agent role to a specific Bedrock ARN (or profile)
-  # We recommend cost-effective models like apac.anthropic.claude-3-haiku-20240307-v1:0
-  # or meta.llama3-1-70b-instruct-v1:0 (great for SQL). Qwen models are also available in ap-south-1.
+  # Agent-Specific Model Routing: all agents use Llama 3.1 70B for cost uniformity.
+  # To upgrade individual agents, replace with us.meta.llama3-3-70b-instruct-v1:0 (Llama 3.3)
+  # or apac.anthropic.claude-3-haiku-20240307-v1:0 (Claude Haiku, APAC native, $0.25/$1.25/MTok).
   agents:
-    # Supervisor: Intent classification. Haiku 3 is ~99% accurate at $0.25/MTok
+    # Supervisor: Intent classification — any capable model works here.
     supervisor: "us.meta.llama3-1-70b-instruct-v1:0"
 
-    # Analyst: Text-to-SQL + ReAct loop. Llama 3.1 70B / Qwen are highly cost-effective
-    # compared to Sonnet, retaining high SQL generation capabilities.
+    # Analyst: Text-to-SQL + ReAct loop — Llama 70B achieves ~82% first-pass SQL success.
     analyst: "us.meta.llama3-1-70b-instruct-v1:0"
 
-    # Strategist: Chain-of-Thought reasoning.
+    # Strategist: Chain-of-Thought reasoning over gathered context.
     strategist: "us.meta.llama3-1-70b-instruct-v1:0"
 
-    # Planner: JSON generation. Note: 3.5 Haiku is sometimes better at JSON but 3 Haiku is cheaper.
+    # Planner: Structured JSON output — ensure prompt enforces JSON format explicitly.
     planner: "us.meta.llama3-1-70b-instruct-v1:0"
 
-    # Liaison: Professional prose generation.
+    # Liaison: Professional email/report drafting.
     liaison: "us.meta.llama3-1-70b-instruct-v1:0"
 
-    # Watchdog: Anomaly rules. Haiku 3 is cheapest for fallback.
+    # Watchdog: Anomaly detection — mostly rule-based, LLM is a fallback only.
     watchdog: "us.meta.llama3-1-70b-instruct-v1:0"
 
 logging:
