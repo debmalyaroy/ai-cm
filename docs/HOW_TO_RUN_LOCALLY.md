@@ -216,7 +216,7 @@ Make sure Postgres and Ollama are running via `run.ps1 -Profile local_llm`, then
 **Build all images locally** (no push):
 ```powershell
 # Windows
-.scriptsuild.ps1 all
+.\scripts\build.ps1 all
 
 # Linux/Mac
 ./scripts/build.sh all
@@ -239,9 +239,9 @@ The `-Target prod` flag will:
 
 You can also build individual components:
 ```powershell
-.scriptsuild.ps1 backend   # Go binary only (cross-compiled for Linux)
-.scriptsuild.ps1 frontend  # Vite/React assets only
-.scriptsuild.ps1 docker    # Docker images only
+.\scripts\build.ps1 backend   # Go binary only (cross-compiled for Linux)
+.\scripts\build.ps1 frontend  # Vite/React assets only
+.\scripts\build.ps1 docker    # Docker images only
 ```
 
 ---
@@ -288,7 +288,7 @@ docker ps --format "table {{.Names}}	{{.Status}}	{{.Ports}}"
 
 ## Stopping Services
 ```powershell
-.scriptsshutdown.ps1
+.\scripts\shutdown.ps1
 ```
 
 Or on Linux/Mac:

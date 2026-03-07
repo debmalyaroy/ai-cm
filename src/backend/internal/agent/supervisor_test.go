@@ -26,8 +26,9 @@ func (m *mockLLM) GenerateStream(ctx context.Context, systemPrompt, userPrompt s
 	return ch, nil
 }
 
-func (m *mockLLM) Name() string                      { return "mock" }
-func (m *mockLLM) WithModel(model string) llm.Client { return m }
+func (m *mockLLM) Name() string                           { return "mock" }
+func (m *mockLLM) WithModel(model string) llm.Client      { return m }
+func (m *mockLLM) WithMaxTokens(n int) llm.Client         { return m }
 
 func TestNewSupervisorAgent(t *testing.T) {
 	s := NewSupervisorAgent(&mockLLM{response: "test"}, nil, nil)
@@ -62,6 +63,15 @@ func TestSupervisorClassifyIntent(t *testing.T) {
 		{"check for anomalies", IntentMonitor},
 		{"system health status", IntentMonitor},
 		{"any alerts today", IntentMonitor},
+		// Action/plan creation patterns
+		{"Create a replenishment order for Pampers Active Baby Medium 62pc in Kolkata", IntentPlan},
+		{"restock MamyPoko diapers in East India", IntentPlan},
+		{"schedule a flash sale for underperforming SKUs", IntentPlan},
+		{"launch a promotion for baby wipes", IntentPlan},
+		{"place an order to replenish inventory", IntentPlan},
+		{"adjust pricing for the top 5 diaper brands", IntentPlan},
+		// Follow-up context should not corrupt intent
+		{"What are the top 3 cities in East India contributing to the underperformance, and what are the sales numbers for each?\n\n[Context from previous response: East India at ₹23Cr is underperforming. Investigate distribution gaps.]", IntentInsight},
 	}
 
 	for _, tc := range tests {

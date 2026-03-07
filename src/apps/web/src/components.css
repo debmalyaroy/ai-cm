@@ -938,6 +938,13 @@
   border-color: var(--color-warning);
 }
 
+.chat-followup-pill.acted {
+  opacity: 0.5;
+  cursor: default;
+  pointer-events: none;
+  filter: grayscale(0.4);
+}
+
 /* Chat response Markdown */
 .chat-response h1,
 .chat-response h2,

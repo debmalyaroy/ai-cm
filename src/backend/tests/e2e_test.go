@@ -272,7 +272,7 @@ func TestE2E_NativeSQLGenerationExhaustive(t *testing.T) {
 
 	// We only need the Analyst Agent for this test
 	toolset := agent.NewToolSet(db, llmClient)
-	analyst := agent.NewAnalystAgent(llmClient, db, toolset)
+	analyst := agent.NewAnalystAgent(llmClient, db, toolset, nil)
 
 	queries := []string{
 		"Show me the top 3 selling products by revenue.",

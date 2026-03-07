@@ -9,6 +9,7 @@ interface SuggestionItem {
     label: string;
     type: "question" | "download" | "email" | "action";
     value: string;
+    link?: string;
 }
 
 interface ChatMessage {
@@ -41,10 +42,13 @@ export default function ChatPanel() {
     const [sessions, setSessions] = useState<ChatSession[]>([]);
     const [createAlertForm, setCreateAlertForm] = useState<CreateAlertForm | null>(null);
     const [alertSaving, setAlertSaving] = useState(false);
+    const [actedSuggestions, setActedSuggestions] = useState<Set<string>>(new Set());
+    const [restoreOffer, setRestoreOffer] = useState<ChatSession | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const abortRef = useRef<AbortController | null>(null);
     const pendingMessage = useRef<string | null>(null);
     const [explainTrigger, setExplainTrigger] = useState(0);
+    const proactiveCountRef = useRef(0); // tracks proactive insights shown this session (max 3)
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -57,6 +61,15 @@ export default function ChatPanel() {
         const saved = localStorage.getItem("aicm-chat-dock");
         if (saved === "left" || saved === "right" || saved === "bottom") setDockPosition(saved);
     }, []);
+
+    // When panel opens with no active session: offer to restore the most recent session
+    useEffect(() => {
+        if (!isOpen || messages.length > 0 || sessionId) return;
+        chatAPI.getSessions().then(sessions => {
+            if (sessions.length > 0) setRestoreOffer(sessions[0]);
+        }).catch(() => {/* non-fatal */});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isOpen]);
 
     // Broadcast panel width via CSS variable for page resize
     useEffect(() => {
@@ -137,10 +150,15 @@ export default function ChatPanel() {
             { id: assistantId, role: "assistant", content: "", reasoning: [], isStreaming: true },
         ]);
 
+        // For the very first message of a new session, include page context so the
+        // agent knows where the user is (C4: update context with current page)
+        const effectiveContext = overrideContext ||
+            (!sessionId ? `User is on page: ${window.location.pathname}` : undefined);
+
         abortRef.current = streamChat(
             msgText,
             sessionId,
-            overrideContext,
+            effectiveContext,
             (event: ChatSSEEvent) => {
                 switch (event.event) {
                     case "session":
@@ -214,6 +232,40 @@ export default function ChatPanel() {
         }
     }, [isOpen, isLoading, handleSend, explainTrigger]);
 
+    // Returns page-aware quick-start suggestions shown in the welcome screen
+    const getPageQuickActions = (): SuggestionItem[] => {
+        const path = window.location.pathname;
+        if (path.includes("/actions")) return [
+            { label: "📋 Pending approvals", type: "question", value: "Show all pending actions awaiting my approval" },
+            { label: "⚡ High-impact actions", type: "question", value: "Which pending actions have the highest expected impact?" },
+            { label: "📊 Actions by category", type: "question", value: "Break down pending actions by category" },
+            { label: "📅 Recommend order", type: "question", value: "In what order should I approve these actions for maximum impact?" },
+            { label: "⚙️ Propose new actions", type: "action", value: "Analyse current sales data and propose 3 new actions I should take this week" },
+        ];
+        if (path.includes("/alerts")) return [
+            { label: "🔴 Critical issues now", type: "question", value: "What are the most critical business issues I should address today?" },
+            { label: "📦 Out-of-stock risk", type: "question", value: "Which products are at risk of going out of stock in the next 7 days?" },
+            { label: "💰 Margin at risk", type: "question", value: "Which products have margin declining more than 10% this month?" },
+            { label: "📈 Revenue anomalies", type: "question", value: "Are there any unusual revenue spikes or drops in the last 14 days?" },
+            { label: "🔔 Create alert", type: "action", value: "Create an alert for products where stock drops below reorder level" },
+        ];
+        if (path.includes("/reports")) return [
+            { label: "📊 Monthly summary", type: "download", value: "Generate a monthly performance summary report for this month" },
+            { label: "📈 Sales by category", type: "question", value: "Show me revenue and margin breakdown by category for the last 3 months" },
+            { label: "🏆 Top 10 products", type: "question", value: "Who are the top 10 products by revenue in the last 90 days?" },
+            { label: "📉 Underperformers", type: "question", value: "Which products are significantly underperforming vs last period?" },
+            { label: "📧 Brief the team", type: "email", value: "Draft a monthly performance summary email for my category team" },
+        ];
+        // Default / dashboard
+        return [
+            { label: "🏆 Top performers", type: "question", value: "Show me the top 10 products by revenue this month" },
+            { label: "📉 Underperformers", type: "question", value: "Which products are underperforming vs last month?" },
+            { label: "📅 Compare last period", type: "question", value: "Compare this month's sales vs last month by category" },
+            { label: "💡 Show recommendations", type: "action", value: "Based on current data, what are your top 3 recommendations for me this week?" },
+            { label: "⚠️ Inventory alerts", type: "question", value: "Which products are below reorder level right now?" },
+        ];
+    };
+
     const changeDock = (pos: DockPosition) => {
         setDockPosition(pos);
         localStorage.setItem("aicm-chat-dock", pos);
@@ -227,6 +279,8 @@ export default function ChatPanel() {
         setStatus("");
         setIsLoading(false);
         setCreateAlertForm(null);
+        setActedSuggestions(new Set());
+        setRestoreOffer(null);
     };
 
     const loadSessions = async () => {
@@ -265,14 +319,24 @@ export default function ChatPanel() {
         window.open(sessionId ? `/chat?sessionId=${sessionId}` : `/chat`, "_blank");
     };
 
-    // Handle suggestion click — intercept "create alert" action
+    // Handle suggestion click — intercept "create alert" action, track acted state, handle nav links
     const handleSuggestionClick = (s: SuggestionItem, parentMsgContent?: string) => {
-        // More robust detection: if it's an action and mentions 'alert', it's the inline form
+        setActedSuggestions(prev => { const next = new Set(prev); next.add(s.value); return next; });
+
+        // Intercept "create alert" action — show inline form instead of sending
         const isCreateAlert = s.type === "action" && /alert/i.test(s.value);
         if (isCreateAlert) {
             setCreateAlertForm({ title: "", message: "", severity: "warning", category: "General" });
             return;
         }
+
+        // For suggestions with nav links, open them after sending (if action/download type)
+        if (s.link && (s.type === "action" || s.type === "download")) {
+            handleSend(s.value, parentMsgContent);
+            setTimeout(() => window.open(s.link, "_self"), 1500);
+            return;
+        }
+
         handleSend(s.value, parentMsgContent);
     };
 
@@ -369,6 +433,43 @@ export default function ChatPanel() {
                                 <div className="chat-welcome-icon">🤖</div>
                                 <div className="chat-welcome-title">AI Category Copilot</div>
                                 <div className="chat-welcome-text">Ask me about your sales, products, trends, or any business question.</div>
+
+                                {/* Restore last session offer */}
+                                {restoreOffer && (
+                                    <div style={{ margin: "12px 0 4px", padding: "10px 14px", background: "var(--color-surface)", borderRadius: 10, border: "1px solid var(--color-border)", fontSize: 13 }}>
+                                        <div style={{ color: "var(--color-text-secondary)", marginBottom: 6 }}>Continue last conversation?</div>
+                                        <div style={{ fontWeight: 500, marginBottom: 8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                            "{restoreOffer.first_message.slice(0, 60)}"
+                                        </div>
+                                        <div style={{ display: "flex", gap: 8 }}>
+                                            <button
+                                                className="btn btn-primary"
+                                                style={{ fontSize: 12, padding: "4px 12px" }}
+                                                onClick={() => { loadSession(restoreOffer.id); setRestoreOffer(null); }}
+                                            >Restore</button>
+                                            <button
+                                                style={{ fontSize: 12, padding: "4px 10px", background: "none", border: "none", color: "var(--color-text-secondary)", cursor: "pointer" }}
+                                                onClick={() => setRestoreOffer(null)}
+                                            >Dismiss</button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Page-aware quick action buttons */}
+                                <div style={{ marginTop: 14 }}>
+                                    <div style={{ fontSize: 11, color: "var(--color-text-secondary)", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.05em" }}>Quick starts</div>
+                                    <div className="chat-followups">
+                                        {getPageQuickActions().map((s, i) => (
+                                            <button
+                                                key={i}
+                                                className={`chat-followup-pill action-${s.type}`}
+                                                onClick={() => handleSuggestionClick(s)}
+                                            >
+                                                {s.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
                             </div>
                         )}
 
@@ -418,10 +519,11 @@ export default function ChatPanel() {
                                         {msg.suggestions.map((s, i) => (
                                             <button
                                                 key={i}
-                                                className={`chat-followup-pill action-${s.type}`}
+                                                className={`chat-followup-pill action-${s.type}${actedSuggestions.has(s.value) ? " acted" : ""}`}
                                                 onClick={() => handleSuggestionClick(s, msg.content)}
+                                                title={s.link ? `Opens ${s.link}` : undefined}
                                             >
-                                                {s.label}
+                                                {actedSuggestions.has(s.value) ? "✓ " : ""}{s.label}
                                             </button>
                                         ))}
                                     </div>

@@ -211,10 +211,14 @@ func sendSSE(w io.Writer, event string, data any) {
 func getChatSessions(db *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		slog.DebugContext(c.Request.Context(), "Fetching recent chat sessions")
+		// Prune sessions older than 30 days (best-effort, non-fatal)
+		db.Exec(c, `DELETE FROM chat_sessions WHERE created_at < NOW() - INTERVAL '30 days'`)
+
 		rows, err := db.Query(c, `
 			SELECT s.id, s.created_at,
 				COALESCE((SELECT content FROM chat_messages WHERE session_id = s.id AND role = 'user' ORDER BY created_at ASC LIMIT 1), 'New Chat') as first_message
 			FROM chat_sessions s
+			WHERE s.created_at >= NOW() - INTERVAL '30 days'
 			ORDER BY s.updated_at DESC
 			LIMIT 20
 		`)

@@ -281,7 +281,7 @@ func TestAnalystAgent_Process_NonSQLRetry(t *testing.T) {
 	tools.Register(schemaTool)
 	tools.Register(sqlTool)
 
-	agent := NewAnalystAgent(llmc, nil, tools)
+	agent := NewAnalystAgent(llmc, nil, tools, nil)
 	agent.schemaCache.SetFormattedSchemaForTest("mock schema")
 
 	out, err := agent.Process(context.Background(), &Input{Query: "check inventory levels"})
@@ -311,7 +311,7 @@ func TestAnalystAgent_Process_AllRetriesFail(t *testing.T) {
 	tools := NewToolSet(nil, llmc)
 	tools.Register(schemaTool)
 
-	agent := NewAnalystAgent(llmc, nil, tools)
+	agent := NewAnalystAgent(llmc, nil, tools, nil)
 	agent.schemaCache.SetFormattedSchemaForTest("mock schema")
 
 	out, err := agent.Process(context.Background(), &Input{Query: "check inventory levels"})
@@ -343,6 +343,7 @@ func (m *mockLLMCallbackClient) GenerateStream(ctx context.Context, systemPrompt
 	close(ch)
 	return ch, err
 }
+func (m *mockLLMCallbackClient) WithMaxTokens(n int) llm.Client { return m }
 
 // ---------------------------------------------------------------
 // Shared mocks (used by multiple test files in the package)
@@ -364,6 +365,7 @@ func (m *mockLLMClient) GenerateStream(ctx context.Context, systemPrompt, userPr
 	close(ch)
 	return ch, m.err
 }
+func (m *mockLLMClient) WithMaxTokens(n int) llm.Client { return m }
 
 // Mock tool for get_table_schemas
 type mockSchemaTool struct {

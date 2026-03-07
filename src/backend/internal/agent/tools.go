@@ -17,9 +17,9 @@ type Tool interface {
 }
 
 // --- SQL Sanitizer ---
-
+// Intentionaly not blocking UPDATE and INSERT
 var blockedKeywords = []string{
-	"DROP", "DELETE", "UPDATE", "INSERT", "ALTER", "TRUNCATE",
+	"DROP", "DELETE", "ALTER", "TRUNCATE",
 	"CREATE", "GRANT", "REVOKE", "EXEC", "EXECUTE",
 }
 
@@ -32,8 +32,15 @@ func SanitizeSQL(sql string) error {
 			return fmt.Errorf("blocked SQL operation: %s", kw)
 		}
 		// Check within the query (for multi-statement injection)
-		if strings.Contains(upper, "; "+kw+" ") || strings.Contains(upper, ";"+kw+" ") {
-			return fmt.Errorf("blocked SQL operation: %s (multi-statement)", kw)
+		// Covers "; KEYWORD", ";KEYWORD", and ";KEYWORD\n/\t"
+		for _, sep := range []string{"; " + kw, ";" + kw} {
+			if idx := strings.Index(upper, sep); idx >= 0 {
+				// Ensure the keyword is followed by whitespace or end-of-string (not a column name prefix)
+				rest := upper[idx+len(sep):]
+				if rest == "" || rest[0] == ' ' || rest[0] == '\t' || rest[0] == '\n' || rest[0] == '\r' {
+					return fmt.Errorf("blocked SQL operation: %s (multi-statement)", kw)
+				}
+			}
 		}
 	}
 	return nil

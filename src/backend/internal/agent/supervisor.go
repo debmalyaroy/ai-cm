@@ -9,6 +9,7 @@ import (
 
 	"github.com/debmalyaroy/ai-cm/internal/llm"
 	"github.com/debmalyaroy/ai-cm/internal/memory"
+	"github.com/debmalyaroy/ai-cm/internal/prompts"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -128,44 +129,14 @@ func (s *SupervisorAgent) Process(ctx context.Context, input *Input) (*Output, e
 		output.Reasoning = append(output.Reasoning, analystOutput.Reasoning...)
 
 	case IntentInsight:
-		// First get data from Analyst, then reason with Strategist
 		output.Reasoning = append(output.Reasoning, ReasoningStep{
 			Type:    "action",
 			Content: "Delegating to Analyst for data, then Strategist for insight",
 		})
-
-		// Get data
-		slog.DebugContext(ctx, "Supervisor: delegating intent processing part 1", "intent", intent, "agent", "analyst")
-		analystOutput, err := s.analyst.Process(ctx, input)
-		if err != nil {
-			slog.WarnContext(ctx, "Analyst failed, falling back to Strategist only", "error", err, "session_id", input.SessionID)
-			// Fall through to Strategist without analyst data
+		slog.DebugContext(ctx, "Supervisor: delegating intent processing", "intent", intent, "agent", "analyst+strategist")
+		if err := s.runInsightPipeline(ctx, input, output); err != nil {
+			return nil, err
 		}
-
-		// Enrich context for Strategist
-		strategistInput := &Input{
-			Query:         input.Query,
-			SessionID:     input.SessionID,
-			Context:       make(map[string]any),
-			History:       input.History,
-			MemoryContext: input.MemoryContext,
-		}
-		if err == nil && analystOutput != nil {
-			strategistInput.Context["analyst_data"] = analystOutput.Data
-		}
-
-		slog.DebugContext(ctx, "Supervisor: delegating intent processing part 2", "intent", intent, "agent", "strategist")
-		strategistOutput, err := s.strategist.Process(ctx, strategistInput)
-		if err != nil {
-			return nil, fmt.Errorf("strategist error: %w", err)
-		}
-
-		output.Response = strategistOutput.Response
-		output.AgentName = strategistOutput.AgentName
-		if analystOutput != nil {
-			output.Data = analystOutput.Data
-		}
-		output.Reasoning = append(output.Reasoning, strategistOutput.Reasoning...)
 
 	case IntentPlan:
 		// Delegate to Planner for action proposals
@@ -218,19 +189,22 @@ func (s *SupervisorAgent) Process(ctx context.Context, input *Input) (*Output, e
 		output.Reasoning = append(output.Reasoning, watchdogOutput.Reasoning...)
 
 	case IntentGeneral:
-		output.Response = `👋 Hello! I'm your **AI Category Manager Copilot**.
-
-I can help you with:
-- 📊 **Data Queries**: "Show me sales by region" or "What's the top selling product?"
-- 🔍 **Insights**: "Why did margin drop in East India?" or "Explain the sales trend"
-- ⚡ **Actions**: "Propose a promotional plan for diapers"
-- ✉️ **Communications**: "Draft a compliance alert for seller"
-- 🔔 **Monitoring**: "Check for anomalies" or "System health"
-
-What would you like to know?`
+		if isGreeting(input.Query) {
+			output.Response = "Hello! I'm your **AI Category Manager Copilot**.\n\nI can help you with:\n- **Data Queries**: \"Show me sales by region\" or \"What's the top selling product?\"\n- **Insights & Analysis**: \"Why did margin drop in East India?\" or \"Compare MamyPoko vs competitors\"\n- **Actions & Plans**: \"Propose a promotional plan for diapers\"\n- **Communications**: \"Draft a compliance alert for seller\"\n- **Monitoring**: \"Check for anomalies\" or \"System health\"\n\nWhat would you like to know?"
+		} else {
+			// Ambiguous query with business content — route through Analyst + Strategist
+			slog.InfoContext(ctx, "Supervisor: ambiguous query routed to insight pipeline", "query", input.Query)
+			if err := s.runInsightPipeline(ctx, input, output); err != nil {
+				return nil, err
+			}
+		}
 
 	default:
-		output.Response = "I'm not sure how to help with that. Could you rephrase your question? I can help with data queries, insights, and action recommendations."
+		// Unknown intent — route to Insight pipeline as safe default
+		slog.WarnContext(ctx, "Supervisor: unknown intent, defaulting to insight pipeline", "intent", intent)
+		if err := s.runInsightPipeline(ctx, input, output); err != nil {
+			return nil, err
+		}
 	}
 
 	// Step 3: Critic post-processing (Reflection pattern)
@@ -261,11 +235,49 @@ func (s *SupervisorAgent) StoreEpisodicMemory(ctx context.Context, sessionID, qu
 	return s.memory.StoreEpisode(ctx, sessionID, query, response, agentName)
 }
 
+// runInsightPipeline runs Analyst then Strategist and merges results into output.
+// Used for IntentInsight, IntentGeneral (non-greeting), and unknown intents.
+func (s *SupervisorAgent) runInsightPipeline(ctx context.Context, input *Input, output *Output) error {
+	strategistInput := &Input{
+		Query:         input.Query,
+		SessionID:     input.SessionID,
+		Context:       make(map[string]any),
+		History:       input.History,
+		MemoryContext: input.MemoryContext,
+	}
+	analystOutput, err := s.analyst.Process(ctx, input)
+	if err != nil {
+		slog.WarnContext(ctx, "Analyst failed in insight pipeline, falling back to Strategist only", "error", err)
+	} else if analystOutput != nil {
+		strategistInput.Context["analyst_data"] = analystOutput.Data
+	}
+	strategistOutput, err := s.strategist.Process(ctx, strategistInput)
+	if err != nil {
+		return fmt.Errorf("strategist error: %w", err)
+	}
+	output.Response = strategistOutput.Response
+	output.AgentName = strategistOutput.AgentName
+	if analystOutput != nil {
+		output.Data = analystOutput.Data
+	}
+	output.Reasoning = append(output.Reasoning, strategistOutput.Reasoning...)
+	return nil
+}
+
 func (s *SupervisorAgent) classifyIntent(ctx context.Context, query string) IntentType {
+	// Classify only the user's own question — strip any appended context blocks
+	// (e.g. "[Context from previous response: ...]" added by chat.go for follow-ups).
+	// Classifying the full enriched string causes the LLM to pick up words from the
+	// previous assistant response and misclassify the intent.
+	classifyQuery := query
+	if idx := strings.Index(query, "\n\n[Context"); idx > 0 {
+		classifyQuery = strings.TrimSpace(query[:idx])
+	}
+
 	// Attempt LLM-based classification first if intentLLM is configured
 	if s.intentLLM != nil {
-		slog.DebugContext(ctx, "Supervisor: attempting LLM intent classification", "query", query)
-		intent, err := s.classifyWithLLM(ctx, query)
+		slog.DebugContext(ctx, "Supervisor: attempting LLM intent classification", "query", classifyQuery)
+		intent, err := s.classifyWithLLM(ctx, classifyQuery)
 		if err != nil {
 			slog.WarnContext(ctx, "Supervisor: LLM intent failed, using heuristics", "error", err)
 		} else {
@@ -274,26 +286,17 @@ func (s *SupervisorAgent) classifyIntent(ctx context.Context, query string) Inte
 		}
 	}
 
-	return s.classifyWithHeuristics(ctx, query)
+	return s.classifyWithHeuristics(ctx, classifyQuery)
 }
 
 func (s *SupervisorAgent) classifyWithLLM(ctx context.Context, query string) (IntentType, error) {
 	timeoutCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
-	systemPrompt := `You are an intent classifier. Reply with ONLY one word from this list: query, insight, plan, communicate, monitor, general
-
-Examples:
-- "Show me sales by region" → query
-- "What are the top selling products?" → query
-- "Why did margins drop in East India?" → insight
-- "Analyze the sales trend" → insight
-- "Propose a promotional plan" → plan
-- "What actions should I take?" → plan
-- "Draft an email to the supplier" → communicate
-- "Check for anomalies" → monitor
-- "Is everything healthy?" → monitor
-- "Hello, what can you do?" → general`
+	systemPrompt := prompts.Get("supervisor_intent.md")
+	if systemPrompt == "" {
+		return IntentGeneral, fmt.Errorf("supervisor_intent.md prompt not found")
+	}
 	userPrompt := "Classify this request (reply with ONE word only): " + query
 
 	// Intent only needs one word — cap tokens to avoid the model rambling
@@ -320,9 +323,20 @@ Examples:
 	case "communicate":
 		return IntentCommunicate, nil
 	case "monitor":
-		return IntentMonitor, nil
+		// Only accept "monitor" from LLM if the query actually looks like a monitoring request.
+		// LLMs sometimes mislabel analytical follow-up questions as "monitor" due to words
+		// like "underperformance", "concerns", "gaps" in the surrounding text.
+		if isMonitoringQuery(query) {
+			return IntentMonitor, nil
+		}
+		// Fall back to heuristics — they will likely classify as query or insight
+		return IntentGeneral, fmt.Errorf("LLM returned monitor for non-monitoring query, falling back to heuristics")
 	case "general":
-		return IntentGeneral, nil
+		// Only accept "general" from LLM if the query really looks like a greeting.
+		if isGreeting(query) {
+			return IntentGeneral, nil
+		}
+		return IntentGeneral, fmt.Errorf("LLM returned general for non-greeting, falling back to heuristics")
 	default:
 		return IntentGeneral, fmt.Errorf("unrecognized LLM intent response: %q", resp)
 	}
@@ -331,20 +345,9 @@ Examples:
 func (s *SupervisorAgent) classifyWithHeuristics(_ context.Context, query string) IntentType {
 	lower := strings.ToLower(query)
 
-	// Greeting patterns
-	greetings := []string{"hello", "hi ", "hi!", "hey", "good morning", "good afternoon", "help", "what can you do"}
-	for _, g := range greetings {
-		if strings.Contains(lower, g) || strings.HasPrefix(lower, g) {
-			return IntentGeneral
-		}
-	}
-
-	// Monitoring patterns — keep specific to avoid false positives on "alert", "status"
-	monitorPatterns := []string{"anomal", "watchdog", "monitor", "system health", "health check", "check system", "system status"}
-	for _, p := range monitorPatterns {
-		if strings.Contains(lower, p) {
-			return IntentMonitor
-		}
+	// Pure greeting check — must come first but only for very short/simple greetings
+	if isGreeting(query) {
+		return IntentGeneral
 	}
 
 	// Communication patterns
@@ -355,22 +358,92 @@ func (s *SupervisorAgent) classifyWithHeuristics(_ context.Context, query string
 		}
 	}
 
-	// Planning/Action patterns
-	planPatterns := []string{"plan", "propose", "what should", "recommend", "action", "fix", "resolve", "do about", "suggestion", "next step"}
+	// Planning/Action patterns — checked before monitor so "create alert" routes to plan, not monitor
+	planPatterns := []string{
+		// Recommendation / planning
+		"plan", "propose", "what should", "recommend", "do about", "next step", "prioriti",
+		// Directive action-creation verbs (retail operations)
+		"create a ", "create an ", "create the ",  // "create a replenishment order", "create a promotion"
+		"create action", "create an action", "create alert",
+		"replenish", "restock", "reorder",          // inventory replenishment
+		"place an order", "raise a", "raise an",    // PO/ticket creation
+		"schedule", "launch", "initiate",           // "launch a promotion", "schedule a restock"
+		"submit for approval", "approve",
+		// Adjustment directives
+		"implement", "execute the", "carry out",
+		"increase stock", "reduce price", "boost", "fix", "resolve",
+		"adjust pric", "update pric", "set price",  // "adjust pricing", "update price for X"
+		"change the price", "modify price",
+	}
 	for _, p := range planPatterns {
 		if strings.Contains(lower, p) {
 			return IntentPlan
 		}
 	}
 
-	// Insight patterns (Why/Explain/Analyze)
-	insightPatterns := []string{"why", "explain", "analyze", "reason", "root cause", "insight", "how come", "what happened", "trend"}
+	// Monitoring patterns — after plan so "create alert" is caught above, not here
+	monitorPatterns := []string{"anomal", "watchdog", "monitor", "system health", "health check", "check system", "system status", "alert"}
+	for _, p := range monitorPatterns {
+		if strings.Contains(lower, p) {
+			return IntentMonitor
+		}
+	}
+
+	// Insight patterns — analytical reasoning, comparisons, forecasts, explanations
+	insightPatterns := []string{
+		"why", "explain", "analyze", "analyse", "analysis", "reason", "root cause",
+		"insight", "how come", "what happened", "trend", "forecast", "predict",
+		"compare", "comparison", "versus", "vs ", " vs.", "against",
+		"performance", "evaluate", "assessment", "diagnose",
+		"adjust the forecast", "based on",
+		"profit margin", "margin analysis", "revenue analysis",
+	}
 	for _, p := range insightPatterns {
 		if strings.Contains(lower, p) {
 			return IntentInsight
 		}
 	}
 
-	// Default to data query
+	// Default to data query — any remaining business question is treated as a data retrieval
 	return IntentQuery
+}
+
+// isMonitoringQuery returns true only if the query is genuinely about system monitoring,
+// anomaly detection, or health checks — not a business analysis question that
+// happens to use words like "underperformance" or "concerns".
+func isMonitoringQuery(query string) bool {
+	lower := strings.TrimSpace(strings.ToLower(query))
+	monitorKeywords := []string{
+		"anomal", "watchdog", "monitor", "system health", "health check",
+		"check system", "system status", "alert", "anomaly detection",
+	}
+	for _, kw := range monitorKeywords {
+		if strings.Contains(lower, kw) {
+			return true
+		}
+	}
+	return false
+}
+
+// isGreeting returns true only if the query is a short, greeting-style message
+// with no meaningful business content.
+func isGreeting(query string) bool {
+	lower := strings.TrimSpace(strings.ToLower(query))
+
+	// Must be short — long queries are almost never pure greetings
+	if len(lower) > 80 {
+		return false
+	}
+
+	greetingPhrases := []string{
+		"hello", "hi", "hey", "good morning", "good afternoon", "good evening",
+		"what can you do", "how can you help", "what do you do",
+		"who are you", "introduce yourself",
+	}
+	for _, g := range greetingPhrases {
+		if strings.Contains(lower, g) {
+			return true
+		}
+	}
+	return false
 }
