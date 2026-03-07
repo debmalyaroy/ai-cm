@@ -73,11 +73,22 @@ fi
 
 cd "$ROOT_DIR/infra"
 
+# Support both Docker Compose v2 plugin (docker compose) and v1 standalone (docker-compose)
+if docker compose version &>/dev/null 2>&1; then
+    COMPOSE="docker compose"
+elif command -v docker-compose &>/dev/null; then
+    COMPOSE="docker-compose"
+else
+    echo "[ERROR] Neither 'docker compose' nor 'docker-compose' found. Please install Docker Compose."
+    exit 1
+fi
+echo "Using compose command: $COMPOSE"
+
 echo "Pulling latest production images from $DOCKER_REGISTRY..."
-docker compose -f docker-compose.prod.yml pull
+$COMPOSE -f docker-compose.prod.yml pull
 
 echo "Starting production containers..."
-docker compose -f docker-compose.prod.yml up -d
+$COMPOSE -f docker-compose.prod.yml up -d
 
 echo ""
 echo "✅ Production deployment complete! Services are spinning up."
