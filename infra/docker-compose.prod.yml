@@ -80,3 +80,21 @@ services:
     depends_on:
       - frontend
       - backend
+
+  # --- NEW LOG VIEWER SERVICE ---
+  log-viewer:
+    image: amir20/dozzle:latest
+    container_name: aicm-log-viewer
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "4567:8080"
+    # Optional: If you want to see the log-viewer's own logs in CloudWatch
+#    logging:
+#      <<: *awslogs
+#      options:
+#        awslogs-region: ${AWS_REGION:-ap-south-1}
+#        awslogs-group: /aicm/docker
+#        awslogs-stream: log-viewer
+#        awslogs-create-group: "true"
