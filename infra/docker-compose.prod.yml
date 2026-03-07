@@ -44,8 +44,6 @@ services:
     image: ${DOCKER_REGISTRY}/aicm-frontend:latest
     container_name: aicm-frontend
     restart: unless-stopped
-    environment:
-      VITE_API_URL: ${VITE_API_URL:-http://localhost}
     depends_on:
       - backend
     logging:

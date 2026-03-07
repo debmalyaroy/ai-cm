@@ -92,4 +92,3 @@ $COMPOSE -f docker-compose.prod.yml up -d
 
 echo ""
 echo "✅ Production deployment complete! Services are spinning up."
-echo "   Frontend expecting traffic at: $VITE_API_URL"
