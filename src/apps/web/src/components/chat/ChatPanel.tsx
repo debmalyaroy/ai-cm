@@ -48,7 +48,7 @@ export default function ChatPanel() {
     const abortRef = useRef<AbortController | null>(null);
     const pendingMessage = useRef<string | null>(null);
     const [explainTrigger, setExplainTrigger] = useState(0);
-    const proactiveCountRef = useRef(0); // tracks proactive insights shown this session (max 3)
+
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
