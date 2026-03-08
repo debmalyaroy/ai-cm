@@ -16,6 +16,7 @@
 
     <script>
         tailwind.config = {
+            darkMode: 'class',
             theme: {
                 extend: {
                     fontFamily: { sans: ['Inter', 'sans-serif'] },
@@ -33,6 +34,111 @@
             background-color: #f8fafc;
             color: #0f172a;
         }
+
+        /* ── Dark mode overrides ─────────────────────────────────────────── */
+        html.dark body { background-color: #0a0b0e !important; color: #e2e8f0 !important; }
+
+        html.dark nav {
+            background: rgba(10,11,14,0.9) !important;
+            border-color: #2a2e37 !important;
+        }
+        html.dark nav a { color: #94a3b8 !important; }
+        html.dark nav a:hover { color: #e2e8f0 !important; }
+        html.dark nav a.bg-brand-500 {
+            background-color: #15803d !important;
+            color: #f0fdf4 !important;
+        }
+
+        html.dark h2, html.dark h3, html.dark h4 { color: #e2e8f0 !important; }
+        html.dark p { color: #94a3b8 !important; }
+
+        html.dark .agent-card {
+            background: #13151a !important;
+            border-color: #2a2e37 !important;
+        }
+        html.dark .agent-card h3 { color: #e2e8f0 !important; }
+        html.dark .agent-card p  { color: #94a3b8 !important; }
+        html.dark .agent-card .text-slate-800 { color: #e2e8f0 !important; }
+        html.dark .agent-card .text-xs.text-slate-600 { color: #94a3b8 !important; }
+
+        html.dark .subgraph {
+            background: rgba(19,21,26,0.7) !important;
+            border-color: #2a2e37 !important;
+        }
+        html.dark .subgraph-label { background: #13151a !important; color: #64748b !important; }
+        html.dark .connector-v { border-color: #374151 !important; }
+
+        /* Section content cards (white cards in Why AI, UX, etc.) */
+        html.dark section [class~="bg-white"] {
+            background-color: #13151a !important;
+            border-color: #2a2e37 !important;
+        }
+        html.dark section [class~="bg-slate-50"] {
+            background-color: #0f1115 !important;
+            border-color: #2a2e37 !important;
+        }
+        html.dark section [class~="bg-slate-100"] {
+            background-color: #13151a !important;
+        }
+        html.dark .bg-slate-50 { background-color: #0f1115 !important; }
+        html.dark section [class~="bg-brand-50"] { background-color: rgba(212,176,103,0.08) !important; }
+        html.dark section [class~="bg-accent-50"] { background-color: rgba(59,130,246,0.08) !important; }
+        html.dark section .text-slate-600 { color: #94a3b8 !important; }
+        html.dark section .text-slate-500 { color: #64748b !important; }
+        html.dark section .text-slate-400 { color: #64748b !important; }
+
+        /* Logic / Cloud architecture diagrams */
+        html.dark #logic-content,
+        html.dark #cloud-content {
+            background: #0f1115 !important;
+            border-color: #2a2e37 !important;
+        }
+        html.dark #logic-content [class~="bg-white"],
+        html.dark #cloud-content [class~="bg-white"] {
+            background: #13151a !important;
+            border-color: #2a2e37 !important;
+        }
+
+        html.dark footer {
+            background: #0f1115 !important;
+            border-color: #2a2e37 !important;
+        }
+        html.dark footer p { color: #64748b !important; }
+
+        /* Theme toggle button */
+        .theme-toggle-btn {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            padding: 5px 10px;
+            border-radius: 20px;
+            border: 1px solid #e2e8f0;
+            background: transparent;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 12px;
+            font-weight: 500;
+            color: #64748b;
+            transition: all 0.2s;
+        }
+        .theme-toggle-btn:hover { border-color: #22c55e; color: #1e293b; }
+        html.dark .theme-toggle-btn { border-color: #2a2e37; color: #94a3b8; }
+        html.dark .theme-toggle-btn:hover { border-color: #d4b067; color: #e2e8f0; }
+        .tt-track {
+            width: 30px; height: 17px; border-radius: 9px;
+            background: #cbd5e1;
+            position: relative;
+            transition: background 0.2s;
+            flex-shrink: 0;
+        }
+        .tt-track.on { background: #d4b067; }
+        .tt-knob {
+            width: 13px; height: 13px; border-radius: 50%;
+            background: white;
+            position: absolute; top: 2px; left: 2px;
+            transition: transform 0.2s;
+        }
+        .tt-knob.on { transform: translateX(13px); }
 
         .chart-container {
             position: relative;
@@ -223,6 +329,10 @@
                     <a href="#cloud" class="hover:text-brand-600 transition-colors">Cloud</a>
                     <a href="#ux" class="hover:text-brand-600 transition-colors">UX Value</a>
                     <a href="#aws" class="hover:text-brand-600 transition-colors">AWS Stack</a>
+                    <button class="theme-toggle-btn no-print" onclick="toggleTheme()" id="theme-btn" aria-label="Toggle theme">
+                        <div class="tt-track" id="tt-track"><div class="tt-knob" id="tt-knob"></div></div>
+                        <span id="tt-label">Dark</span>
+                    </button>
                     <a href="./docs/"
                         class="bg-brand-500 text-white px-3 py-1 rounded-full hover:bg-brand-600 transition-colors">Full
                         Documentation</a>
@@ -763,6 +873,23 @@
             — 2026</p>
     </footer>
 
+    <script>
+        function applyTheme(dark) {
+            document.documentElement.classList.toggle('dark', dark);
+            const track = document.getElementById('tt-track');
+            const knob  = document.getElementById('tt-knob');
+            const label = document.getElementById('tt-label');
+            if (track) track.classList.toggle('on', dark);
+            if (knob)  knob.classList.toggle('on', dark);
+            if (label) label.textContent = dark ? 'Light' : 'Dark';
+            localStorage.setItem('aicm-docs-theme', dark ? 'dark' : 'light');
+        }
+        function toggleTheme() { applyTheme(!document.documentElement.classList.contains('dark')); }
+
+        // Restore saved preference (default: light for landing page)
+        const _saved = localStorage.getItem('aicm-docs-theme');
+        applyTheme(_saved === 'dark');
+    </script>
 </body>
 
 </html>

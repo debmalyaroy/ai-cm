@@ -1,431 +1,969 @@
 <!DOCTYPE html>
-<html lang="en">
-
+<html lang="en" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI-CM Documentation</title>
-    <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
-        :root { --sidebar-width: 268px; }
+        /* ── Theme variables (matches frontend exactly) ──────────────────── */
+        :root.dark {
+            --color-bg:             #0a0b0e;
+            --color-surface:        #13151a;
+            --color-surface-hover:  rgba(255,255,255,0.05);
+            --color-sidebar:        #0f1115;
+            --color-border:         #2a2e37;
+            --color-border-light:   #373b47;
+            --color-text:           #e2e8f0;
+            --color-text-secondary: #94a3b8;
+            --color-text-muted:     #64748b;
+            --color-primary:        #d4b067;
+            --color-primary-hover:  #bfa05a;
+            --color-primary-glow:   rgba(212,176,103,0.15);
+            --color-gradient-gold:  linear-gradient(135deg,#d4b067 0%,#bfa05a 100%);
+            --color-success:        #10b981;
+            --color-warning:        #f59e0b;
+            --color-danger:         #ef4444;
+            --color-info:           #60a5fa;
+            --mermaid-theme:        dark;
+        }
+        :root:not(.dark) {
+            --color-bg:             #f5f5f7;
+            --color-surface:        #ffffff;
+            --color-surface-hover:  rgba(0,0,0,0.04);
+            --color-sidebar:        #fafafa;
+            --color-border:         #e2e4e9;
+            --color-border-light:   #d1d5db;
+            --color-text:           #1a1a2e;
+            --color-text-secondary: #6b7280;
+            --color-text-muted:     #9ca3af;
+            --color-primary:        #8b6914;
+            --color-primary-hover:  #6d5210;
+            --color-primary-glow:   rgba(139,105,20,0.10);
+            --color-gradient-gold:  linear-gradient(135deg,#c9a22a 0%,#a68620 100%);
+            --color-success:        #059669;
+            --color-warning:        #d97706;
+            --color-danger:         #dc2626;
+            --color-info:           #2563eb;
+            --mermaid-theme:        neutral;
+        }
 
-        body { font-family: 'Inter', sans-serif; background: #f8fafc; }
+        /* ── Reset & base ────────────────────────────────────────────────── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-        /* ── Layout ── */
+        html, body {
+            height: 100%;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            -webkit-font-smoothing: antialiased;
+            background: var(--color-bg);
+            color: var(--color-text);
+            transition: background 0.2s, color 0.2s;
+        }
+
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--color-border-light); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--color-text-secondary); }
+
+        /* ── Layout ──────────────────────────────────────────────────────── */
+        :root { --sidebar-width: 240px; }
+
+        .app-shell { display: flex; min-height: 100vh; }
+
+        /* ── Sidebar (matches frontend components.css) ───────────────────── */
         .sidebar {
-            position: fixed; top: 0; left: 0; bottom: 0;
             width: var(--sidebar-width);
-            background: #0f172a;
-            overflow-y: auto; overflow-x: hidden;
+            height: 100vh;
+            position: fixed;
+            left: 0; top: 0;
+            display: flex;
+            flex-direction: column;
+            background: var(--color-surface);
+            border-right: 1px solid var(--color-border);
             z-index: 40;
+            overflow: hidden;
             transition: transform 0.25s ease;
         }
-        .sidebar::-webkit-scrollbar { width: 4px; }
-        .sidebar::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
 
-        .main-content {
-            margin-left: var(--sidebar-width);
-            min-height: 100vh;
+        .sidebar-logo {
+            padding: 20px 20px 16px;
+            border-bottom: 1px solid var(--color-border);
+            flex-shrink: 0;
+        }
+        .sidebar-logo-box { display: flex; align-items: center; gap: 10px; }
+        .sidebar-logo-icon {
+            width: 36px; height: 36px;
+            border: 2px solid var(--color-primary);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 16px; color: var(--color-primary);
+            flex-shrink: 0;
+        }
+        .sidebar-logo-title { font-weight: 700; font-size: 16px; letter-spacing: -0.02em; }
+        .sidebar-logo-subtitle { font-size: 11px; color: var(--color-text-secondary); margin-top: 1px; }
+
+        .sidebar-nav { flex: 1; padding: 12px 8px; overflow-y: auto; }
+
+        .sidebar-link {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+            padding: 10px 12px;
+            border-radius: 8px;
+            border: none;
+            border-left: 3px solid transparent;
+            background: transparent;
+            font-family: inherit;
+            font-size: 14px;
+            font-weight: 400;
+            color: var(--color-text-secondary);
+            cursor: pointer;
+            text-align: left;
+            margin-bottom: 2px;
+            transition: all 0.15s ease;
+        }
+        .sidebar-link:hover {
+            background: var(--color-surface-hover);
+            color: var(--color-text);
+        }
+        .sidebar-link.active {
+            font-weight: 600;
+            color: var(--color-text);
+            background: var(--color-primary-glow);
+            border-left-color: var(--color-primary);
+        }
+        .sidebar-link-icon { font-size: 15px; width: 18px; text-align: center; flex-shrink: 0; }
+
+        .sidebar-section-label {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--color-text-muted);
+            padding: 12px 12px 4px;
         }
 
-        @media (max-width: 768px) {
-            .sidebar { transform: translateX(-100%); }
-            .sidebar.open { transform: translateX(0); }
-            .main-content { margin-left: 0; }
-            .sidebar-overlay { display: block; }
+        /* Theme toggle (matches frontend) */
+        .theme-toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            width: calc(100% - 16px);
+            margin: 0 8px 8px;
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: 1px solid var(--color-border);
+            background: var(--color-bg);
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 13px;
+            color: var(--color-text-secondary);
+            transition: all 0.2s;
         }
+        .theme-toggle:hover {
+            border-color: var(--color-primary);
+            color: var(--color-text);
+        }
+        .theme-toggle-track {
+            width: 36px; height: 20px;
+            border-radius: 10px;
+            background: var(--color-border);
+            position: relative;
+            flex-shrink: 0;
+            transition: background 0.2s;
+        }
+        .theme-toggle-track.on { background: var(--color-primary); }
+        .theme-toggle-knob {
+            width: 16px; height: 16px;
+            border-radius: 50%;
+            background: white;
+            position: absolute;
+            top: 2px; left: 2px;
+            transition: transform 0.2s;
+        }
+        .theme-toggle-knob.on { transform: translateX(16px); }
 
-        /* ── Sidebar nav items ── */
-        .nav-item {
-            display: flex; align-items: center; gap: 10px;
-            padding: 9px 16px; border-radius: 8px; margin: 2px 8px;
-            font-size: 13px; font-weight: 500; color: #94a3b8;
-            cursor: pointer; transition: all 0.15s ease;
+        .sidebar-footer {
+            padding: 16px 20px;
+            border-top: 1px solid var(--color-border);
+            flex-shrink: 0;
+        }
+        .sidebar-footer a {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: var(--color-text-secondary);
             text-decoration: none;
+            transition: color 0.15s;
         }
-        .nav-item:hover { background: #1e293b; color: #e2e8f0; }
-        .nav-item.active { background: #15803d; color: #f0fdf4; font-weight: 600; }
-        .nav-item .icon { width: 16px; text-align: center; flex-shrink: 0; font-size: 12px; }
+        .sidebar-footer a:hover { color: var(--color-primary); }
 
-        /* ── Prose (markdown content) ── */
-        .prose { color: #1e293b; line-height: 1.8; max-width: 860px; }
+        /* ── Main area ───────────────────────────────────────────────────── */
+        .main-content {
+            flex: 1;
+            margin-left: var(--sidebar-width);
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .topbar {
+            position: sticky; top: 0; z-index: 20;
+            background: color-mix(in srgb, var(--color-bg) 85%, transparent);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--color-border);
+            padding: 0 32px;
+            height: 52px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .topbar-crumb {
+            font-size: 13px;
+            color: var(--color-text-secondary);
+            white-space: nowrap;
+        }
+        .topbar-crumb a { color: var(--color-text-secondary); text-decoration: none; }
+        .topbar-crumb a:hover { color: var(--color-primary); }
+        .topbar-sep { color: var(--color-border-light); }
+        .topbar-current {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--color-text);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .topbar-github {
+            margin-left: auto;
+            color: var(--color-text-secondary);
+            text-decoration: none;
+            font-size: 18px;
+            transition: color 0.15s;
+        }
+        .topbar-github:hover { color: var(--color-primary); }
+
+        /* Mobile menu button */
+        .menu-btn {
+            display: none;
+            background: none;
+            border: none;
+            color: var(--color-text-secondary);
+            font-size: 18px;
+            cursor: pointer;
+            padding: 4px;
+        }
+
+        .page-body { flex: 1; padding: 40px 48px; }
+
+        /* Card wrapper for content */
+        .content-card {
+            max-width: 860px;
+            margin: 0 auto;
+            background: var(--color-surface);
+            border: 1px solid var(--color-border);
+            border-radius: 12px;
+            padding: 48px 56px;
+            transition: border-color 0.2s;
+        }
+
+        footer.page-footer {
+            padding: 20px 48px;
+            text-align: center;
+            font-size: 12px;
+            color: var(--color-text-muted);
+            border-top: 1px solid var(--color-border);
+        }
+
+        /* ── Prose ───────────────────────────────────────────────────────── */
+        .prose { color: var(--color-text); line-height: 1.8; }
 
         .prose h1 {
-            font-size: 2rem; font-weight: 800; color: #0f172a;
-            border-bottom: 2px solid #e2e8f0; padding-bottom: 0.6rem;
-            margin: 0 0 1.5rem;
+            font-size: 1.9rem; font-weight: 800; letter-spacing: -0.02em;
+            color: var(--color-text);
+            border-bottom: 2px solid var(--color-border);
+            padding-bottom: 0.6rem; margin-bottom: 1.5rem;
         }
         .prose h2 {
-            font-size: 1.4rem; font-weight: 700; color: #1e293b;
-            margin: 2.5rem 0 1rem; border-bottom: 1px solid #f1f5f9;
-            padding-bottom: 0.4rem;
+            font-size: 1.35rem; font-weight: 700;
+            color: var(--color-text);
+            border-bottom: 1px solid var(--color-border);
+            padding-bottom: 0.35rem;
+            margin: 2.5rem 0 1rem;
         }
         .prose h3 {
-            font-size: 1.1rem; font-weight: 700; color: #334155;
+            font-size: 1.05rem; font-weight: 700;
+            color: var(--color-text);
             margin: 2rem 0 0.75rem;
         }
         .prose h4 {
-            font-size: 0.95rem; font-weight: 700; color: #475569;
-            margin: 1.5rem 0 0.5rem; text-transform: uppercase;
-            letter-spacing: 0.05em;
+            font-size: 0.875rem; font-weight: 700;
+            color: var(--color-text-secondary);
+            text-transform: uppercase; letter-spacing: 0.06em;
+            margin: 1.5rem 0 0.5rem;
         }
         .prose h5, .prose h6 {
-            font-size: 0.9rem; font-weight: 600; color: #64748b;
+            font-size: 0.875rem; font-weight: 600;
+            color: var(--color-text-secondary);
             margin: 1rem 0 0.4rem;
         }
 
-        .prose p { margin-bottom: 1.25rem; color: #334155; }
+        .prose p { margin-bottom: 1.1rem; color: var(--color-text); }
+        .prose p:last-child { margin-bottom: 0; }
 
-        .prose a { color: #15803d; text-decoration: none; font-weight: 500; }
-        .prose a:hover { text-decoration: underline; color: #166534; }
+        .prose a {
+            color: var(--color-primary);
+            text-decoration: none;
+            font-weight: 500;
+            cursor: pointer;
+        }
+        .prose a:hover { text-decoration: underline; color: var(--color-primary-hover); }
 
-        /* Badge images (shields.io etc.) — display inline */
-        .prose img { display: inline; vertical-align: middle; margin: 0 2px; max-width: 100%; }
+        /* Inline badge images */
+        .prose img {
+            display: inline;
+            vertical-align: middle;
+            margin: 0 2px;
+            max-height: 24px;
+        }
         /* Block images */
-        .prose p > img:only-child { display: block; margin: 1.5rem auto; max-width: 100%; border-radius: 8px; }
+        .prose p > img:only-child {
+            display: block;
+            margin: 1.5rem auto;
+            max-width: 100%;
+            max-height: none;
+            border-radius: 8px;
+            border: 1px solid var(--color-border);
+        }
 
         .prose code {
-            background: #f1f5f9; color: #e11d48;
-            padding: 0.15rem 0.4rem; border-radius: 4px;
-            font-family: 'JetBrains Mono', monospace; font-size: 0.85em;
+            background: var(--color-bg);
+            border: 1px solid var(--color-border);
+            color: var(--color-danger);
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85em;
         }
         .prose pre {
-            background: #0f172a; color: #e2e8f0;
-            padding: 1.25rem 1.5rem; border-radius: 10px;
-            overflow-x: auto; margin: 1.5rem 0;
-            border: 1px solid #1e293b;
+            background: var(--color-sidebar);
+            border: 1px solid var(--color-border);
+            color: var(--color-text);
+            padding: 1.25rem 1.5rem;
+            border-radius: 10px;
+            overflow-x: auto;
+            margin: 1.5rem 0;
         }
         .prose pre code {
-            background: none; color: inherit; padding: 0;
-            font-size: 0.875rem; line-height: 1.7;
+            background: none; border: none; padding: 0;
+            color: inherit; font-size: 0.875rem; line-height: 1.7;
         }
 
-        .prose ul {
-            list-style-type: disc; padding-left: 1.75rem;
-            margin-bottom: 1.25rem; color: #334155;
-        }
-        .prose ol {
-            list-style-type: decimal; padding-left: 1.75rem;
-            margin-bottom: 1.25rem; color: #334155;
-        }
-        .prose li { margin-bottom: 0.35rem; }
-        .prose li > ul, .prose li > ol { margin-top: 0.35rem; margin-bottom: 0.35rem; }
+        .prose ul { list-style-type: disc; padding-left: 1.75rem; margin-bottom: 1.1rem; }
+        .prose ol { list-style-type: decimal; padding-left: 1.75rem; margin-bottom: 1.1rem; }
+        .prose li { margin-bottom: 0.35rem; color: var(--color-text); }
+        .prose li > ul, .prose li > ol { margin-top: 0.35rem; margin-bottom: 0.25rem; }
 
         .prose blockquote {
-            border-left: 4px solid #22c55e; background: #f0fdf4;
-            padding: 0.75rem 1.25rem; border-radius: 0 8px 8px 0;
-            margin: 1.5rem 0; color: #166534;
+            border-left: 4px solid var(--color-primary);
+            background: var(--color-primary-glow);
+            padding: 0.75rem 1.25rem;
+            border-radius: 0 8px 8px 0;
+            margin: 1.5rem 0;
         }
-        .prose blockquote p { color: #166534; margin: 0; }
-        .prose blockquote strong { color: #14532d; }
+        .prose blockquote p { color: var(--color-text); margin: 0; }
 
         .prose hr {
-            border: none; border-top: 2px solid #e2e8f0;
+            border: none;
+            border-top: 1px solid var(--color-border);
             margin: 2.5rem 0;
         }
 
         /* Tables */
         .prose table {
             width: 100%; border-collapse: collapse;
-            margin: 1.5rem 0; font-size: 0.9rem;
-            border: 1px solid #e2e8f0; border-radius: 8px;
-            overflow: hidden;
+            margin: 1.5rem 0; font-size: 0.875rem;
+            border: 1px solid var(--color-border);
+            border-radius: 8px; overflow: hidden;
         }
-        .prose thead { background: #f8fafc; }
+        .prose thead { background: var(--color-bg); }
         .prose th {
             padding: 10px 14px; text-align: left;
-            font-weight: 700; color: #475569; font-size: 0.8rem;
-            text-transform: uppercase; letter-spacing: 0.04em;
-            border-bottom: 2px solid #e2e8f0;
+            font-weight: 700; font-size: 0.75rem;
+            text-transform: uppercase; letter-spacing: 0.05em;
+            color: var(--color-text-secondary);
+            border-bottom: 2px solid var(--color-border);
         }
         .prose td {
-            padding: 10px 14px; color: #334155;
-            border-bottom: 1px solid #f1f5f9; vertical-align: top;
+            padding: 10px 14px;
+            color: var(--color-text);
+            border-bottom: 1px solid var(--color-border);
+            vertical-align: top;
         }
         .prose tr:last-child td { border-bottom: none; }
-        .prose tr:hover td { background: #f8fafc; }
+        .prose tbody tr:hover td { background: var(--color-surface-hover); }
 
-        /* Mermaid diagrams */
+        /* Mermaid */
         .mermaid-wrap {
-            background: white; border: 1px solid #e2e8f0;
-            border-radius: 10px; padding: 1.5rem;
-            margin: 1.5rem 0; overflow-x: auto;
-            display: flex; justify-content: center;
+            background: var(--color-bg);
+            border: 1px solid var(--color-border);
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin: 1.5rem 0;
+            overflow-x: auto;
+            display: flex;
+            justify-content: center;
         }
 
-        /* Loading / error states */
-        .loading-state {
+        /* Strong */
+        .prose strong { font-weight: 700; color: var(--color-text); }
+
+        /* Fullscreen expand button (images + mermaid) */
+        .expandable { position: relative; display: block; }
+        .mermaid-wrap { position: relative; }
+        .expand-btn {
+            position: absolute; top: 8px; right: 8px;
+            width: 30px; height: 30px;
+            border-radius: 6px;
+            border: 1px solid var(--color-border);
+            background: var(--color-surface);
+            color: var(--color-text-secondary);
+            cursor: pointer;
             display: flex; align-items: center; justify-content: center;
-            padding: 5rem 2rem; color: #94a3b8; gap: 12px;
+            font-size: 12px;
+            opacity: 0;
+            transition: opacity 0.15s, color 0.15s, border-color 0.15s;
+            z-index: 2;
         }
-        .error-state {
-            background: #fef2f2; border: 1px solid #fecaca;
-            border-radius: 10px; padding: 1.5rem; color: #dc2626;
+        .expandable:hover .expand-btn,
+        .mermaid-wrap:hover .expand-btn { opacity: 1; }
+        .expand-btn:hover { color: var(--color-primary); border-color: var(--color-primary); }
+        .prose .expandable img {
+            display: block; margin: 0; border-radius: 8px;
+            border: 1px solid var(--color-border); max-width: 100%;
+        }
+
+        /* Lightbox */
+        #lightbox {
+            position: fixed; inset: 0; z-index: 200;
+            background: rgba(0,0,0,0.88);
+            backdrop-filter: blur(6px);
+            display: flex; align-items: center; justify-content: center;
+            cursor: zoom-out;
+        }
+        #lightbox.hidden { display: none; }
+        .lb-inner {
+            position: relative;
+            max-width: 92vw; max-height: 92vh;
+            background: var(--color-surface);
+            border: 1px solid var(--color-border);
+            border-radius: 12px;
+            padding: 20px;
+            overflow: hidden;
+            cursor: default;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+        }
+        /* Toolbar: close + zoom controls */
+        .lb-toolbar {
+            position: absolute; top: 10px; right: 10px;
+            display: flex; align-items: center; gap: 4px;
+            z-index: 1;
+        }
+        .lb-btn {
+            width: 30px; height: 30px;
+            border-radius: 6px;
+            border: 1px solid var(--color-border);
+            background: var(--color-surface);
+            color: var(--color-text-secondary);
+            cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 13px;
+            transition: all 0.15s;
+        }
+        .lb-btn:hover { color: var(--color-primary); border-color: var(--color-primary); }
+        .lb-btn.lb-close:hover { color: var(--color-danger); border-color: var(--color-danger); }
+        #lb-img { max-width: 88vw; max-height: 88vh; object-fit: contain; border-radius: 8px; display: none; }
+        /* SVG viewport: scrollable, zoomable */
+        #lb-svg-viewport {
+            display: none;
+            overflow: auto;
+            max-width: 88vw; max-height: calc(88vh - 20px);
+            cursor: grab;
+        }
+        #lb-svg-viewport:active { cursor: grabbing; }
+        #lb-svg-scaler { transform-origin: top left; transition: transform 0.15s ease; }
+        #lb-svg-viewport svg { display: block; max-width: none; height: auto; }
+
+        /* Loading / error */
+        .state-box {
+            display: flex; align-items: center; justify-content: center;
+            gap: 12px; padding: 5rem 2rem;
+            color: var(--color-text-secondary); font-size: 14px;
+        }
+        .state-box.error {
+            background: color-mix(in srgb, var(--color-danger) 8%, transparent);
+            border: 1px solid color-mix(in srgb, var(--color-danger) 30%, transparent);
+            border-radius: 10px; color: var(--color-danger); padding: 1.5rem;
             margin: 2rem 0;
+        }
+        .spinner {
+            width: 20px; height: 20px; flex-shrink: 0;
+            border: 2px solid var(--color-border);
+            border-top-color: var(--color-primary);
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Mobile overlay */
+        .sidebar-overlay {
+            display: none;
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 39;
+        }
+
+        /* ── Responsive ──────────────────────────────────────────────────── */
+        @media (max-width: 768px) {
+            .sidebar { transform: translateX(-100%); }
+            .sidebar.open { transform: translateX(0); }
+            .sidebar-overlay.open { display: block; }
+            .main-content { margin-left: 0; }
+            .menu-btn { display: block; }
+            .page-body { padding: 24px 16px; }
+            .content-card { padding: 24px 20px; }
+            .topbar { padding: 0 16px; }
+        }
+        @media (max-width: 480px) {
+            .prose h1 { font-size: 1.5rem; }
+            .prose h2 { font-size: 1.15rem; }
         }
     </style>
 </head>
+<body>
 
-<body class="antialiased">
-
-    <!-- Sidebar overlay for mobile -->
-    <div id="sidebar-overlay" class="sidebar-overlay fixed inset-0 bg-black/50 z-30 hidden" onclick="toggleSidebar()"></div>
-
-    <!-- Sidebar -->
-    <aside class="sidebar" id="sidebar">
-        <div class="p-5 border-b border-slate-800">
-            <a href="../" class="flex items-center gap-2 group">
-                <span class="text-lg font-black text-green-400 tracking-tight">AI-CM</span>
-                <span class="text-sm font-light text-slate-400 group-hover:text-slate-300">Docs</span>
-            </a>
+<!-- Lightbox -->
+<div id="lightbox" class="hidden" onclick="closeLightbox()">
+    <div class="lb-inner" onclick="event.stopPropagation()">
+        <div class="lb-toolbar" id="lb-toolbar">
+            <!-- Zoom controls shown only for SVG diagrams -->
+            <button class="lb-btn" id="lb-zoom-out" onclick="lbZoom(-0.2)" title="Zoom out"><i class="fas fa-minus"></i></button>
+            <button class="lb-btn" id="lb-zoom-reset" onclick="lbZoom(0)" title="Reset zoom"><i class="fas fa-compress-alt"></i></button>
+            <button class="lb-btn" id="lb-zoom-in"  onclick="lbZoom(+0.2)" title="Zoom in"><i class="fas fa-plus"></i></button>
+            <button class="lb-btn lb-close" onclick="closeLightbox()" title="Close"><i class="fas fa-times"></i></button>
         </div>
-
-        <nav class="py-4" id="sidebar-nav">
-            <!-- Populated by JS -->
-        </nav>
-
-        <div class="p-4 border-t border-slate-800 mt-auto">
-            <a href="../" class="nav-item" style="margin: 0;">
-                <span class="icon"><i class="fas fa-arrow-left"></i></span>
-                Back to Report
-            </a>
+        <img id="lb-img" src="" alt="">
+        <div id="lb-svg-viewport">
+            <div id="lb-svg-scaler"></div>
         </div>
-    </aside>
+    </div>
+</div>
 
-    <!-- Main -->
-    <div class="main-content flex flex-col min-h-screen">
+<div id="sidebar-overlay" class="sidebar-overlay" onclick="closeSidebar()"></div>
 
-        <!-- Top bar -->
-        <header class="sticky top-0 z-20 bg-white/90 backdrop-blur border-b border-slate-200 px-6 py-3 flex items-center gap-4">
-            <button class="md:hidden text-slate-600 hover:text-slate-900" onclick="toggleSidebar()">
-                <i class="fas fa-bars text-lg"></i>
-            </button>
-            <div class="flex items-center gap-2 text-sm text-slate-500 min-w-0">
-                <a href="../" class="hover:text-green-600 shrink-0">AI-CM</a>
-                <span class="shrink-0">/</span>
-                <span id="breadcrumb" class="font-medium text-slate-800 truncate">Documentation</span>
+<!-- ── Sidebar ──────────────────────────────────────────────────────────── -->
+<aside class="sidebar" id="sidebar">
+
+    <div class="sidebar-logo">
+        <div class="sidebar-logo-box">
+            <div class="sidebar-logo-icon">📋</div>
+            <div>
+                <div class="sidebar-logo-title">AI-CM</div>
+                <div class="sidebar-logo-subtitle">Documentation</div>
             </div>
-            <div class="ml-auto flex items-center gap-3 text-slate-400 text-sm">
-                <a href="https://github.com/debmalyaroy/ai-cm" target="_blank" rel="noopener"
-                   class="hover:text-slate-700 transition-colors">
-                    <i class="fab fa-github text-lg"></i>
-                </a>
-            </div>
-        </header>
-
-        <!-- Content -->
-        <main class="flex-1 px-6 py-10 md:px-12">
-            <article id="content" class="prose mx-auto">
-                <div class="loading-state">
-                    <i class="fas fa-spinner fa-spin text-2xl text-green-500"></i>
-                    <span>Loading documentation…</span>
-                </div>
-            </article>
-        </main>
-
-        <footer class="border-t border-slate-200 py-6 px-12 text-center text-xs text-slate-400">
-            AI-CM Documentation — 2026
-        </footer>
+        </div>
     </div>
 
-    <script>
-        // ── Navigation manifest ────────────────────────────────────────────
-        const DOCS = [
-            { label: 'README / Overview',       file: null,                          icon: 'fa-house' },
-            { label: 'Requirements',            file: '../requirements.md',           icon: 'fa-file-lines' },
-            { label: 'Phased Implementation',   file: 'phased_implementation.md',    icon: 'fa-list-check' },
-            { label: 'Agentic Architecture',    file: 'design_agent.md',             icon: 'fa-brain' },
-            { label: 'Low Level Design',        file: 'low_level_design.md',         icon: 'fa-diagram-project' },
-            { label: 'AWS Deployment',          file: 'aws_deployment_guide.md',     icon: 'fa-cloud' },
-            { label: 'How to Run Locally',      file: 'HOW_TO_RUN_LOCALLY.md',      icon: 'fa-laptop-code' },
-            { label: 'GitHub CI',               file: 'GITHUB_CI.md',               icon: 'fa-gears' },
-            { label: 'Prompt Testing',          file: 'PROMPT_TESTING.md',          icon: 'fa-flask' },
-        ];
+    <nav class="sidebar-nav" id="sidebar-nav">
+        <!-- populated by JS -->
+    </nav>
 
-        // ── URL helpers ────────────────────────────────────────────────────
-        // The viewer lives at docs/index.html, so:
-        //   viewerDir  = https://.../ai-cm/docs/
-        //   rootDir    = https://.../ai-cm/
-        const viewerDir = new URL('./', window.location.href).href;
-        const rootDir   = new URL('../', viewerDir).href;
+    <!-- Theme toggle -->
+    <button class="theme-toggle" onclick="toggleTheme()" id="theme-btn" aria-label="Toggle theme">
+        <div class="theme-toggle-track on" id="toggle-track">
+            <div class="theme-toggle-knob on" id="toggle-knob"></div>
+        </div>
+        <span id="toggle-label">Dark mode</span>
+    </button>
 
-        function getFileParam() {
-            return new URLSearchParams(window.location.search).get('file');
+    <div class="sidebar-footer">
+        <a href="../">
+            <i class="fas fa-arrow-left" style="font-size:12px"></i>
+            Back to Summary
+        </a>
+    </div>
+</aside>
+
+<!-- ── Main ─────────────────────────────────────────────────────────────── -->
+<div class="app-shell">
+    <div class="main-content">
+
+        <header class="topbar">
+            <button class="menu-btn" onclick="toggleSidebar()" aria-label="Open menu">
+                <i class="fas fa-bars"></i>
+            </button>
+            <span class="topbar-crumb">
+                <a href="../">AI-CM</a>
+            </span>
+            <span class="topbar-sep">/</span>
+            <span class="topbar-current" id="breadcrumb">Documentation</span>
+            <a class="topbar-github" href="https://github.com/debmalyaroy/ai-cm"
+               target="_blank" rel="noopener" title="View on GitHub">
+                <i class="fab fa-github"></i>
+            </a>
+        </header>
+
+        <div class="page-body">
+            <div class="content-card">
+                <article class="prose" id="content">
+                    <div class="state-box">
+                        <div class="spinner"></div>
+                        Loading documentation…
+                    </div>
+                </article>
+            </div>
+        </div>
+
+        <footer class="page-footer">AI-CM Documentation — 2026</footer>
+
+    </div>
+</div>
+
+<script>
+// ── Doc manifest ──────────────────────────────────────────────────────────
+// file: path relative to docs/ (or null for README at root)
+// id:   opaque hash used in the URL — never exposes a file name
+const DOCS = [
+    { id: 'overview',              label: 'README / Overview',      file: null,                       icon: 'fa-house',           section: null },
+    { id: 'requirements',          label: 'Requirements',           file: '../requirements.md',        icon: 'fa-file-lines',      section: 'Reference' },
+    { id: 'phased-implementation', label: 'Phased Implementation',  file: 'phased_implementation.md', icon: 'fa-list-check',      section: 'Reference' },
+    { id: 'agentic-architecture',  label: 'Agentic Architecture',   file: 'design_agent.md',          icon: 'fa-brain',           section: 'Design' },
+    { id: 'low-level-design',      label: 'Low Level Design',       file: 'low_level_design.md',      icon: 'fa-diagram-project', section: 'Design' },
+    { id: 'aws-deployment',        label: 'AWS Deployment',         file: 'aws_deployment_guide.md',  icon: 'fa-cloud',           section: 'Operations' },
+    { id: 'how-to-run',            label: 'How to Run Locally',     file: 'HOW_TO_RUN_LOCALLY.md',   icon: 'fa-laptop-code',     section: 'Operations' },
+    { id: 'github-ci',             label: 'GitHub CI',              file: 'GITHUB_CI.md',             icon: 'fa-gears',           section: 'Operations' },
+    { id: 'prompt-testing',        label: 'Prompt Testing',         file: 'PROMPT_TESTING.md',        icon: 'fa-flask',           section: 'Operations' },
+];
+
+// Build lookup tables
+const byId   = Object.fromEntries(DOCS.map(d => [d.id, d]));
+const byFile = Object.fromEntries(DOCS.filter(d => d.file).map(d => [d.file, d]));
+
+// ── URL helpers ───────────────────────────────────────────────────────────
+// The viewer is at docs/index.html, so:
+const viewerDir = new URL('./', window.location.href).href;   // …/docs/
+const rootDir   = new URL('../', viewerDir).href;             // …/ (repo root)
+
+function currentId() {
+    const h = window.location.hash.replace('#', '');
+    return (h && byId[h]) ? h : 'overview';
+}
+
+function docFetchUrl(doc) {
+    if (!doc.file) return '../README.md';
+    return doc.file; // relative to docs/
+}
+
+// Resolve a raw .md href (from inside a rendered doc) back to a doc id
+function resolveToDocId(rawHref, fetchBase) {
+    try {
+        const resolved = new URL(rawHref, fetchBase);
+        const href = resolved.href;
+
+        // Normalise to a path relative to repo root
+        if (href.startsWith(viewerDir)) {
+            // Within docs/ — e.g. docs/design_agent.md
+            const rel = href.slice(viewerDir.length).split('#')[0]; // strip anchors
+            return byFile[rel]?.id ?? null;
         }
-
-        function fileParamToFetchUrl(fileParam) {
-            if (!fileParam) return '../README.md';
-            return fileParam; // relative to docs/ — e.g. 'design_agent.md' or '../requirements.md'
+        if (href.startsWith(rootDir)) {
+            // Root-level — e.g. requirements.md
+            const rel = '../' + href.slice(rootDir.length).split('#')[0];
+            return byFile[rel]?.id ?? null;
         }
+    } catch (_) {}
+    return null;
+}
 
-        // Convert an absolute URL back to a ?file= param string (or null if external)
-        function absoluteToFileParam(absUrl) {
-            const href = absUrl.href;
-            if (href.startsWith(viewerDir)) {
-                // Within docs/ — e.g. docs/design_agent.md → 'design_agent.md'
-                return href.slice(viewerDir.length);
+// ── Theme ─────────────────────────────────────────────────────────────────
+function isDark() { return document.documentElement.classList.contains('dark'); }
+
+function applyTheme(dark) {
+    document.documentElement.classList.toggle('dark', dark);
+    const track = document.getElementById('toggle-track');
+    const knob  = document.getElementById('toggle-knob');
+    const label = document.getElementById('toggle-label');
+    track.classList.toggle('on', dark);
+    knob.classList.toggle('on', dark);
+    label.textContent = dark ? 'Dark mode' : 'Light mode';
+    localStorage.setItem('aicm-docs-theme', dark ? 'dark' : 'light');
+}
+
+function toggleTheme() {
+    const nowDark = !isDark();
+    applyTheme(nowDark);
+    // Re-render current doc so mermaid picks up the new theme
+    loadDoc(currentId(), false);
+}
+
+// ── Sidebar ───────────────────────────────────────────────────────────────
+function buildSidebar() {
+    const nav = document.getElementById('sidebar-nav');
+    let html = '';
+    let lastSection = undefined;
+
+    for (const doc of DOCS) {
+        if (doc.section !== lastSection) {
+            if (doc.section) {
+                html += `<div class="sidebar-section-label">${doc.section}</div>`;
             }
-            if (href.startsWith(rootDir)) {
-                // Root level — e.g. /requirements.md → '../requirements.md'
-                return '../' + href.slice(rootDir.length);
+            lastSection = doc.section;
+        }
+        html += `
+            <button class="sidebar-link" data-id="${doc.id}"
+                    onclick="handleNavClick('${doc.id}')">
+                <span class="sidebar-link-icon"><i class="fas ${doc.icon}"></i></span>
+                ${doc.label}
+            </button>`;
+    }
+    nav.innerHTML = html;
+}
+
+function updateActiveLink(id) {
+    document.querySelectorAll('.sidebar-link[data-id]').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.id === id);
+    });
+}
+
+function handleNavClick(id) {
+    closeSidebar();
+    loadDoc(id, true);
+}
+
+function toggleSidebar() {
+    document.getElementById('sidebar').classList.toggle('open');
+    document.getElementById('sidebar-overlay').classList.toggle('open');
+}
+function closeSidebar() {
+    document.getElementById('sidebar').classList.remove('open');
+    document.getElementById('sidebar-overlay').classList.remove('open');
+}
+
+// ── Marked config ─────────────────────────────────────────────────────────
+marked.use({ gfm: true, breaks: false });
+
+// ── Doc loader ────────────────────────────────────────────────────────────
+async function loadDoc(id, pushState) {
+    const doc = byId[id] ?? byId['overview'];
+    id = doc.id;
+
+    if (pushState) {
+        history.pushState({ id }, '', '#' + id);
+    }
+    updateActiveLink(id);
+
+    const container = document.getElementById('content');
+    container.innerHTML = `<div class="state-box"><div class="spinner"></div>Loading…</div>`;
+
+    const fetchUrl  = docFetchUrl(doc);
+    const fetchBase = new URL(fetchUrl, viewerDir); // absolute URL of the file
+
+    try {
+        const res = await fetch(fetchUrl);
+        if (!res.ok) throw new Error(`${res.status} — could not load "${fetchUrl}"`);
+        const markdown = await res.text();
+
+        container.innerHTML = marked.parse(markdown);
+
+        // ── Post-process 1: mermaid code blocks ──────────────────────────
+        container.querySelectorAll('pre code').forEach(code => {
+            const lang = [...code.classList]
+                .find(c => c.startsWith('language-'))?.replace('language-', '');
+            if (lang === 'mermaid') {
+                const wrap  = document.createElement('div');
+                wrap.className = 'mermaid-wrap';
+                const inner = document.createElement('div');
+                inner.className = 'mermaid';
+                inner.textContent = code.textContent;
+                wrap.appendChild(inner);
+                code.closest('pre').replaceWith(wrap);
             }
-            return null; // external
-        }
+        });
 
-        // ── Sidebar ────────────────────────────────────────────────────────
-        function buildSidebar() {
-            const nav   = document.getElementById('sidebar-nav');
-            const current = getFileParam();
-            nav.innerHTML = DOCS.map(doc => {
-                const isActive = (doc.file === null && current === null)
-                              || (doc.file !== null && current === doc.file);
-                return `<a class="nav-item ${isActive ? 'active' : ''}"
-                           href="?file=${doc.file ? encodeURIComponent(doc.file) : ''}"
-                           data-file="${doc.file ?? ''}"
-                           onclick="handleNavClick(event, ${JSON.stringify(doc.file)})">
-                            <span class="icon"><i class="fas ${doc.icon}"></i></span>
-                            ${doc.label}
-                        </a>`;
-            }).join('');
-        }
+        // ── Post-process 2: rewrite .md links ────────────────────────────
+        // Resolved links that map to a known doc get a data-id attribute
+        // and a neutral href of "#" so no file name is ever shown.
+        // External links are left untouched.
+        container.querySelectorAll('a[href]').forEach(a => {
+            const href = a.getAttribute('href');
+            if (!href) return;
+            if (href.startsWith('http://') || href.startsWith('https://') ||
+                href.startsWith('mailto:')) return;
 
-        function updateSidebarActive(fileParam) {
-            document.querySelectorAll('.nav-item[data-file]').forEach(el => {
-                const elFile = el.getAttribute('data-file') || null;
-                const match  = (fileParam === null && elFile === null) || (elFile === fileParam);
-                el.classList.toggle('active', match);
-            });
-        }
-
-        function toggleSidebar() {
-            const sb = document.getElementById('sidebar');
-            const ov = document.getElementById('sidebar-overlay');
-            sb.classList.toggle('open');
-            ov.classList.toggle('hidden', !sb.classList.contains('open'));
-        }
-
-        // ── Marked setup ──────────────────────────────────────────────────
-        // Use default marked rendering — mermaid blocks handled in post-process step
-        marked.use({ gfm: true, breaks: false });
-
-        // ── Mermaid setup ─────────────────────────────────────────────────
-        mermaid.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'loose' });
-
-        // ── Load & render a doc ───────────────────────────────────────────
-        async function loadDoc(fileParam, pushState = false) {
-            const container = document.getElementById('content');
-            container.innerHTML = `<div class="loading-state">
-                <i class="fas fa-spinner fa-spin text-2xl text-green-500"></i>
-                <span>Loading…</span></div>`;
-
-            const fetchUrl = fileParamToFetchUrl(fileParam);
-
-            if (pushState) {
-                const url = fileParam ? `?file=${encodeURIComponent(fileParam)}` : '?';
-                history.pushState({ file: fileParam }, '', url);
-            }
-
-            updateSidebarActive(fileParam);
-
-            try {
-                const res = await fetch(fetchUrl);
-                if (!res.ok) throw new Error(`Could not load ${fetchUrl} (${res.status})`);
-                const markdown = await res.text();
-
-                // Render markdown → HTML
-                container.innerHTML = marked.parse(markdown);
-
-                // ── Post-process 1: convert mermaid code blocks ──────────
-                container.querySelectorAll('pre code').forEach(code => {
-                    const lang = [...code.classList]
-                        .find(c => c.startsWith('language-'))
-                        ?.replace('language-', '');
-                    if (lang === 'mermaid') {
-                        const wrap = document.createElement('div');
-                        wrap.className = 'mermaid-wrap';
-                        const inner = document.createElement('div');
-                        inner.className = 'mermaid';
-                        inner.textContent = code.textContent;
-                        wrap.appendChild(inner);
-                        code.parentElement.replaceWith(wrap);
-                    }
-                });
-
-                // ── Post-process 2: rewrite .md links ────────────────────
-                // Resolve relative links against the fetched file's URL,
-                // then convert back to ?file= params so they open in the viewer.
-                const fetchBase = new URL(fetchUrl, viewerDir);
-                container.querySelectorAll('a[href]').forEach(a => {
-                    const href = a.getAttribute('href');
-                    if (!href) return;
-                    // Skip anchors, mailto, and external URLs
-                    if (href.startsWith('#') || href.startsWith('mailto:') ||
-                        href.startsWith('http://') || href.startsWith('https://')) return;
-
-                    if (href.endsWith('.md') || href.includes('.md#') || href.includes('.md?')) {
-                        try {
-                            const resolved  = new URL(href, fetchBase);
-                            const fileParam = absoluteToFileParam(resolved);
-                            if (fileParam) {
-                                a.setAttribute('href', `?file=${encodeURIComponent(fileParam)}`);
-                                a.setAttribute('data-md-file', fileParam);
-                            }
-                        } catch (_) { /* leave as-is */ }
-                    }
-                });
-
-                // ── Post-process 3: render mermaid diagrams ───────────────
-                const diagrams = container.querySelectorAll('.mermaid');
-                if (diagrams.length) {
-                    await mermaid.run({ nodes: diagrams });
+            if (href.endsWith('.md') || /\.md[#?]/.test(href)) {
+                const targetId = resolveToDocId(href, fetchBase);
+                if (targetId) {
+                    a.setAttribute('href', '#');
+                    a.setAttribute('data-nav-id', targetId);
                 }
-
-                // ── Update page title & breadcrumb ───────────────────────
-                const h1 = container.querySelector('h1');
-                const title = h1?.textContent?.trim() || DOCS.find(d => d.file === fileParam)?.label || 'Documentation';
-                document.title = `${title} — AI-CM Docs`;
-                document.getElementById('breadcrumb').textContent = title;
-
-                // Scroll to top
-                window.scrollTo({ top: 0, behavior: 'instant' });
-
-            } catch (err) {
-                container.innerHTML = `<div class="error-state">
-                    <strong><i class="fas fa-triangle-exclamation mr-2"></i>Error loading document</strong>
-                    <p class="mt-2 text-sm">${err.message}</p></div>`;
+                // If not resolvable to a known doc, leave as-is (will 404 gracefully)
             }
-        }
-
-        // ── Click handler for sidebar & in-page .md links ─────────────────
-        function handleNavClick(e, fileParam) {
-            e.preventDefault();
-            loadDoc(fileParam || null, true);
-        }
-
-        // Intercept clicks on rewritten in-page links
-        document.getElementById('content').addEventListener('click', e => {
-            const a = e.target.closest('a[data-md-file]');
-            if (!a) return;
-            e.preventDefault();
-            const fileParam = a.getAttribute('data-md-file');
-            loadDoc(fileParam, true);
         });
 
-        // ── Browser back / forward ────────────────────────────────────────
-        window.addEventListener('popstate', e => {
-            const fileParam = e.state?.file ?? null;
-            loadDoc(fileParam, false);
-            updateSidebarActive(fileParam);
+        // ── Post-process 3: mermaid rendering ────────────────────────────
+        mermaid.initialize({
+            startOnLoad: false,
+            theme: isDark() ? 'dark' : 'neutral',
+            securityLevel: 'loose',
         });
+        const diagrams = container.querySelectorAll('.mermaid');
+        if (diagrams.length) {
+            await mermaid.run({ nodes: diagrams });
+        }
 
-        // ── Init ──────────────────────────────────────────────────────────
-        buildSidebar();
-        loadDoc(getFileParam(), false);
-    </script>
+        // ── Post-process 4: fullscreen buttons ───────────────────────────
+        addFullscreenButtons(container);
+
+        // ── Update title & breadcrumb ─────────────────────────────────────
+        const h1 = container.querySelector('h1');
+        const title = h1?.textContent?.trim() || doc.label;
+        document.title = `${title} — AI-CM Docs`;
+        document.getElementById('breadcrumb').textContent = title;
+
+        window.scrollTo({ top: 0, behavior: 'instant' });
+
+    } catch (err) {
+        container.innerHTML = `
+            <div class="state-box error">
+                <i class="fas fa-triangle-exclamation"></i>
+                <span><strong>Could not load document.</strong><br>
+                <span style="font-size:13px;opacity:0.8">${err.message}</span></span>
+            </div>`;
+    }
+}
+
+// ── Lightbox ──────────────────────────────────────────────────────────────
+let _lbScale = 1;
+const LB_MIN = 0.3, LB_MAX = 4;
+
+function openLightbox(opts) {
+    const lb         = document.getElementById('lightbox');
+    const lbImg      = document.getElementById('lb-img');
+    const lbViewport = document.getElementById('lb-svg-viewport');
+    const lbScaler   = document.getElementById('lb-svg-scaler');
+    const zoomBtns   = ['lb-zoom-in', 'lb-zoom-out', 'lb-zoom-reset'];
+
+    if (opts.type === 'img') {
+        lbImg.src = opts.src;
+        lbImg.alt = opts.alt || '';
+        lbImg.style.display = 'block';
+        lbViewport.style.display = 'none';
+        lbScaler.innerHTML = '';
+        zoomBtns.forEach(id => document.getElementById(id).style.display = 'none');
+    } else {
+        lbImg.style.display = 'none';
+        lbImg.src = '';
+        _lbScale = 1;
+        lbScaler.innerHTML = opts.svgHtml || '';
+        lbScaler.style.transform = 'scale(1)';
+        lbViewport.style.display = 'block';
+        zoomBtns.forEach(id => document.getElementById(id).style.display = 'flex');
+    }
+    lb.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeLightbox() {
+    document.getElementById('lightbox').classList.add('hidden');
+    document.body.style.overflow = '';
+}
+
+function lbZoom(delta) {
+    const scaler = document.getElementById('lb-svg-scaler');
+    if (delta === 0) {
+        _lbScale = 1;
+    } else {
+        _lbScale = Math.min(LB_MAX, Math.max(LB_MIN, _lbScale + delta));
+    }
+    scaler.style.transform = `scale(${_lbScale})`;
+}
+
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { closeLightbox(); return; }
+    const lb = document.getElementById('lightbox');
+    if (lb.classList.contains('hidden')) return;
+    if (e.key === '+' || e.key === '=') lbZoom(+0.2);
+    if (e.key === '-')                  lbZoom(-0.2);
+    if (e.key === '0')                  lbZoom(0);
+});
+
+// ── Fullscreen buttons ────────────────────────────────────────────────────
+function addFullscreenButtons(container) {
+    // Block images (skip shield/badge images)
+    container.querySelectorAll('.prose img').forEach(img => {
+        const src = img.getAttribute('src') || '';
+        if (src.includes('shields.io') || src.includes('badge') || src.includes('img.shields')) return;
+        // Only wrap block-context images (sole child of their paragraph)
+        const parent = img.parentElement;
+        if (parent && parent.children.length === 1 && (parent.tagName === 'P' || parent.classList.contains('expandable'))) {
+            const wrap = document.createElement('div');
+            wrap.className = 'expandable';
+            parent.insertBefore(wrap, img);
+            wrap.appendChild(img);
+            const btn = makeExpandBtn(() => openLightbox({ type: 'img', src: img.src, alt: img.alt }));
+            wrap.appendChild(btn);
+        }
+    });
+
+    // Mermaid diagrams
+    container.querySelectorAll('.mermaid-wrap').forEach(wrap => {
+        // Avoid double-adding
+        if (wrap.querySelector('.expand-btn')) return;
+        const btn = makeExpandBtn(() => {
+            const svg = wrap.querySelector('.mermaid svg');
+            openLightbox({ type: 'svg', svgHtml: svg ? svg.outerHTML : wrap.querySelector('.mermaid')?.innerHTML || '' });
+        });
+        wrap.appendChild(btn);
+    });
+}
+
+function makeExpandBtn(onClick) {
+    const btn = document.createElement('button');
+    btn.className = 'expand-btn';
+    btn.title = 'View fullscreen';
+    btn.innerHTML = '<i class="fas fa-expand-alt"></i>';
+    btn.addEventListener('click', e => { e.stopPropagation(); onClick(); });
+    return btn;
+}
+
+// ── In-page link click delegation ─────────────────────────────────────────
+document.getElementById('content').addEventListener('click', e => {
+    const a = e.target.closest('a[data-nav-id]');
+    if (!a) return;
+    e.preventDefault();
+    loadDoc(a.getAttribute('data-nav-id'), true);
+});
+
+// ── Browser back / forward ────────────────────────────────────────────────
+window.addEventListener('popstate', e => {
+    const id = e.state?.id ?? currentId();
+    loadDoc(id, false);
+});
+
+// ── Init ──────────────────────────────────────────────────────────────────
+(function init() {
+    // Restore theme
+    const saved = localStorage.getItem('aicm-docs-theme');
+    applyTheme(saved ? saved === 'dark' : true); // default: dark
+
+    buildSidebar();
+    loadDoc(currentId(), false);
+})();
+</script>
 </body>
-
 </html>
