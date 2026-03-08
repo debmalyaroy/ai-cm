@@ -104,7 +104,7 @@ func (s *Scheduler) tryRunJob(ctx context.Context, job Job) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	var lockedBy *string
 	// Use FOR UPDATE SKIP LOCKED so multiple nodes don't block each other

@@ -239,7 +239,9 @@ func TestCardActions_ShortLLMResponse_PadsWithDefaults(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
 	}
 	var resp map[string]any
-	json.Unmarshal(w.Body.Bytes(), &resp) //nolint:errcheck
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
 	actionsRaw := resp["actions"].([]any)
 	if len(actionsRaw) != 3 {
 		t.Errorf("len(actions) = %d, want 3", len(actionsRaw))

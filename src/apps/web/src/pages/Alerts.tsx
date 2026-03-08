@@ -74,6 +74,16 @@ export default function AlertsPage() {
                         Real-time alerts from Watchdog Agent monitoring
                     </p>
                 </div>
+                <button
+                    className="btn btn-ghost"
+                    onClick={loadAlerts}
+                    disabled={loading}
+                    title="Refresh"
+                    style={{ display: "flex", alignItems: "center", gap: 6 }}
+                >
+                    <span style={{ display: "inline-block", animation: loading ? "spin 0.7s linear infinite" : "none" }}>↻</span>
+                    {loading ? "Refreshing…" : "Refresh"}
+                </button>
             </div>
 
             <div style={{ display: "flex", gap: 8, marginBottom: 24, flexWrap: "wrap" }}>

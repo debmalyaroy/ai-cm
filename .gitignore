@@ -30,6 +30,9 @@ coverage/
 vendor/
 .claude/
 
+# Swagger (generated docs)
+swagger.*
+
 # Python (ML)
 __pycache__/
 *.py[cod]

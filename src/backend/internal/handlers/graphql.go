@@ -200,8 +200,12 @@ func buildChatSchema(db *pgxpool.Pool, supervisor *agent.SupervisorAgent, llmCli
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
 					sessionID := p.Args["sessionId"].(string)
 					slog.DebugContext(p.Context, "GraphQL: Deleting session", "session_id", sessionID)
-					db.Exec(p.Context, "DELETE FROM chat_messages WHERE session_id = $1", sessionID)
-					db.Exec(p.Context, "DELETE FROM chat_sessions WHERE id = $1", sessionID)
+					if _, err := db.Exec(p.Context, "DELETE FROM chat_messages WHERE session_id = $1", sessionID); err != nil {
+						slog.WarnContext(p.Context, "failed to delete chat messages", "error", err)
+					}
+					if _, err := db.Exec(p.Context, "DELETE FROM chat_sessions WHERE id = $1", sessionID); err != nil {
+						slog.WarnContext(p.Context, "failed to delete chat session", "error", err)
+					}
 					slog.InfoContext(p.Context, "GraphQL: Session deleted", "session_id", sessionID)
 					return true, nil
 				},
@@ -221,11 +225,15 @@ func buildChatSchema(db *pgxpool.Pool, supervisor *agent.SupervisorAgent, llmCli
 
 					if sessionID == "" {
 						sessionID = uuid.New().String()
-						db.Exec(p.Context, "INSERT INTO chat_sessions (id) VALUES ($1)", sessionID)
+						if _, err := db.Exec(p.Context, "INSERT INTO chat_sessions (id) VALUES ($1)", sessionID); err != nil {
+							slog.WarnContext(p.Context, "failed to create chat session", "error", err)
+						}
 					}
 
-					db.Exec(p.Context, "INSERT INTO chat_messages (session_id, role, content) VALUES ($1, $2, $3)",
-						sessionID, "user", message)
+					if _, err := db.Exec(p.Context, "INSERT INTO chat_messages (session_id, role, content) VALUES ($1, $2, $3)",
+						sessionID, "user", message); err != nil {
+						slog.WarnContext(p.Context, "failed to store user message", "error", err)
+					}
 
 					var history []agent.Message
 					rows, err := db.Query(p.Context, `
@@ -253,8 +261,10 @@ func buildChatSchema(db *pgxpool.Pool, supervisor *agent.SupervisorAgent, llmCli
 						return nil, err
 					}
 
-					db.Exec(p.Context, "INSERT INTO chat_messages (session_id, role, content, metadata) VALUES ($1, $2, $3, $4)",
-						sessionID, "assistant", output.Response, fmt.Sprintf(`{"agent": "%s"}`, output.AgentName))
+					if _, err := db.Exec(p.Context, "INSERT INTO chat_messages (session_id, role, content, metadata) VALUES ($1, $2, $3, $4)",
+						sessionID, "assistant", output.Response, fmt.Sprintf(`{"agent": "%s"}`, output.AgentName)); err != nil {
+						slog.WarnContext(p.Context, "failed to store assistant message", "error", err)
+					}
 
 					// Store explicitly in agent Episodic memory
 					go func(storeCtx context.Context, sid, q, r, agentName string) {

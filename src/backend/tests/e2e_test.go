@@ -227,7 +227,9 @@ func TestE2E_NativeActions(t *testing.T) {
 	router, db, _ := setupNativeE2E(t)
 
 	// Clean out old pending actions explicitly to trigger LLM generation
-	db.Exec(context.Background(), "DELETE FROM action_log")
+	if _, err := db.Exec(context.Background(), "DELETE FROM action_log"); err != nil {
+		t.Fatalf("cleanup action_log: %v", err)
+	}
 
 	// 1. Generate new actions via LLM
 	reqGen, _ := http.NewRequest("POST", "/api/actions/generate", strings.NewReader(`{}`))
@@ -246,7 +248,7 @@ func TestE2E_NativeActions(t *testing.T) {
 
 	var acts []map[string]interface{}
 	bodyBytes, _ := io.ReadAll(wFetch.Body)
-	json.Unmarshal(bodyBytes, &acts)
+	_ = json.Unmarshal(bodyBytes, &acts)
 
 	if len(acts) == 0 {
 		t.Logf("LLM generated 0 strategic actions (expected >= 0)")

@@ -64,7 +64,7 @@ func TestSchemaCache_GetFormattedSchema_NilDB(t *testing.T) {
 				didPanic = true
 			}
 		}()
-		sc.GetFormattedSchema(context.Background()) //nolint:errcheck
+		_, _ = sc.GetFormattedSchema(context.Background())
 	}()
 
 	if !didPanic {

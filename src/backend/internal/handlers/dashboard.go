@@ -74,18 +74,20 @@ func getKPIs(db *pgxpool.Pool) gin.HandlerFunc {
 		}
 
 		// Active SKUs
-		db.QueryRow(c, `SELECT COUNT(*) FROM dim_products WHERE status = 'active'`).Scan(&kpis.ActiveSKUs)
+		_ = db.QueryRow(c, `SELECT COUNT(*) FROM dim_products WHERE status = 'active'`).Scan(&kpis.ActiveSKUs)
 
 		// Previous period for change calculation
 		var prevGMV, prevMargin float64
-		db.QueryRow(c, `
-			SELECT 
+		if err := db.QueryRow(c, `
+			SELECT
 				COALESCE(SUM(revenue), 0),
 				COALESCE(AVG(margin / NULLIF(revenue, 0) * 100), 0)
 			FROM fact_sales
 			WHERE sale_date >= CURRENT_DATE - INTERVAL '6 months'
 			AND sale_date < CURRENT_DATE - INTERVAL '3 months'
-		`).Scan(&prevGMV, &prevMargin)
+		`).Scan(&prevGMV, &prevMargin); err != nil {
+			slog.WarnContext(c.Request.Context(), "failed to query previous period KPIs", "error", err)
+		}
 
 		if prevGMV > 0 {
 			kpis.GMVChange = ((kpis.TotalGMV - prevGMV) / prevGMV) * 100

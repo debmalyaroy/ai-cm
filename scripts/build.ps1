@@ -62,10 +62,32 @@ function Build-Backend {
     Write-Info "Building backend..."
     Push-Location (Join-Path $RootDir "src\backend")
     try {
-        Write-Info "Running unit tests (internal packages)..."
+        Write-Info "Downloading Go modules..."
+        go mod download
+        if ($LASTEXITCODE -ne 0) { Write-Err "go mod download failed"; exit 1 }
+
+        Write-Info "Running unit tests..."
         $env:GOOS = ""; $env:GOARCH = ""; $env:CGO_ENABLED = ""
-        go test ./internal/... -count=1
+        go test -skip 'E2E|e2e|EndToEnd' ./... -count=1 -timeout 120s
         if ($LASTEXITCODE -ne 0) { Write-Err "Backend unit tests failed"; exit 1 }
+
+        Write-Info "Generating Swagger docs..."
+        $swag = Get-Command swag -ErrorAction SilentlyContinue
+        if ($swag) {
+            swag init -g cmd/server/main.go -d . --parseDependency --parseInternal
+            if ($LASTEXITCODE -ne 0) { Write-Err "Swagger generation failed"; exit 1 }
+        } else {
+            Write-Warn "swag not found — skipping Swagger generation (install: go install github.com/swaggo/swag/cmd/swag@latest)"
+        }
+
+        Write-Info "Running golangci-lint..."
+        $lint = Get-Command golangci-lint -ErrorAction SilentlyContinue
+        if ($lint) {
+            golangci-lint run --timeout=5m
+            if ($LASTEXITCODE -ne 0) { Write-Err "golangci-lint failed"; exit 1 }
+        } else {
+            Write-Warn "golangci-lint not found — skipping lint (install: https://golangci-lint.run/usage/install/)"
+        }
 
         $binDir = Join-Path $RootDir "bin"
         if (-not (Test-Path $binDir)) { New-Item -ItemType Directory -Path $binDir | Out-Null }
@@ -85,6 +107,8 @@ function Build-Backend {
         Write-Info "Backend built: bin\aicm-server-amd64, bin\aicm-server-arm64"
     }
     finally {
+        # Reset cross-compilation vars so subsequent commands (Docker, etc.) run natively
+        $env:GOOS = ""; $env:GOARCH = ""; $env:CGO_ENABLED = ""
         Pop-Location
     }
 }

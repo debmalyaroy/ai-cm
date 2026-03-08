@@ -120,7 +120,7 @@ func parseActions(text string) []ActionSuggestion {
 		} else if val, ok := trimPrefix(line, "Type:"); ok {
 			current.ActionType = val
 		} else if val, ok := trimPrefix(line, "Confidence:"); ok {
-			fmt.Sscanf(val, "%f", &current.Confidence)
+			_, _ = fmt.Sscanf(val, "%f", &current.Confidence)
 		}
 	}
 	// Capture last action if not terminated by ---

@@ -43,8 +43,27 @@ parse_env_prod() {
 build_backend() {
     info "Building backend..."
     cd "$ROOT_DIR/src/backend"
-    info "Running internal unit tests..."
-    # go test ./internal/... -count=1 || error "Backend internal tests failed"
+
+    info "Downloading Go modules..."
+    go mod download
+
+    info "Running unit tests..."
+    GOOS="" GOARCH="" CGO_ENABLED="" go test -skip 'E2E|e2e|EndToEnd' ./... -count=1 -timeout 120s || error "Backend unit tests failed"
+
+    info "Generating Swagger docs..."
+    if command -v swag &>/dev/null; then
+        swag init -g cmd/server/main.go -d . --parseDependency --parseInternal
+    else
+        warn "swag not found — skipping Swagger generation (install: go install github.com/swaggo/swag/cmd/swag@latest)"
+    fi
+
+    info "Running golangci-lint..."
+    if command -v golangci-lint &>/dev/null; then
+        golangci-lint run --timeout=5m
+    else
+        warn "golangci-lint not found — skipping lint (install: https://golangci-lint.run/usage/install/)"
+    fi
+
     mkdir -p "$ROOT_DIR/bin"
     info "Building Linux binary (amd64)..."
     CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o "$ROOT_DIR/bin/aicm-server-amd64" ./cmd/server

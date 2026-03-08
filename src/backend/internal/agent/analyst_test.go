@@ -260,7 +260,9 @@ func TestResultCache_TTLExpiry(t *testing.T) {
 // ---------------------------------------------------------------
 
 func TestAnalystAgent_Process_NonSQLRetry(t *testing.T) {
-	prompts.Init("../../../prompts")
+	if err := prompts.Init("../../../prompts"); err != nil {
+		t.Fatalf("prompts.Init: %v", err)
+	}
 
 	schemaTool := &mockSchemaTool{}
 	sqlTool := &mockSQLTool{}
@@ -297,7 +299,9 @@ func TestAnalystAgent_Process_NonSQLRetry(t *testing.T) {
 }
 
 func TestAnalystAgent_Process_AllRetriesFail(t *testing.T) {
-	prompts.Init("../../../prompts")
+	if err := prompts.Init("../../../prompts"); err != nil {
+		t.Fatalf("prompts.Init: %v", err)
+	}
 
 	schemaTool := &mockSchemaTool{}
 

@@ -123,7 +123,7 @@ func TestLocalClient_Generate_Success(t *testing.T) {
 			t.Error("stream should be false for Generate")
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(LocalResponse{Response: "generated text", Done: true})
+		_ = json.NewEncoder(w).Encode(LocalResponse{Response: "generated text", Done: true})
 	}))
 	defer srv.Close()
 
@@ -140,7 +140,7 @@ func TestLocalClient_Generate_Success(t *testing.T) {
 func TestLocalClient_Generate_WithMaxTokens(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req LocalRequest
-		json.NewDecoder(r.Body).Decode(&req)
+		_ = json.NewDecoder(r.Body).Decode(&req)
 		numPredict, ok := req.Options["num_predict"]
 		if !ok {
 			t.Error("num_predict option should be set when maxTokens > 0")
@@ -149,13 +149,15 @@ func TestLocalClient_Generate_WithMaxTokens(t *testing.T) {
 		if numPredict.(float64) != 100 {
 			t.Errorf("num_predict = %v, want 100", numPredict)
 		}
-		json.NewEncoder(w).Encode(LocalResponse{Response: "ok", Done: true})
+		_ = json.NewEncoder(w).Encode(LocalResponse{Response: "ok", Done: true})
 	}))
 	defer srv.Close()
 
 	c := newTestLocalClient(srv.URL)
 	c.maxTokens = 100
-	c.Generate(context.Background(), "", "prompt") //nolint:errcheck
+	if _, err := c.Generate(context.Background(), "", "prompt"); err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
 }
 
 func TestLocalClient_Generate_NonOKStatus(t *testing.T) {
@@ -173,7 +175,9 @@ func TestLocalClient_Generate_NonOKStatus(t *testing.T) {
 
 func TestLocalClient_Generate_BadJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		io.WriteString(w, "not-json{{{") //nolint:errcheck
+		if _, err := io.WriteString(w, "not-json{{{"); err != nil {
+			t.Errorf("write bad JSON: %v", err)
+		}
 	}))
 	defer srv.Close()
 
@@ -212,13 +216,15 @@ func TestLocalClient_GenerateStream_Success(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req LocalRequest
-		json.NewDecoder(r.Body).Decode(&req)
+		_ = json.NewDecoder(r.Body).Decode(&req)
 		if !req.Stream {
 			t.Error("stream should be true for GenerateStream")
 		}
 		enc := json.NewEncoder(w)
 		for _, ch := range chunks {
-			enc.Encode(ch) //nolint:errcheck
+			if err := enc.Encode(ch); err != nil {
+				t.Errorf("encode chunk: %v", err)
+			}
 		}
 	}))
 	defer srv.Close()
@@ -263,7 +269,9 @@ func TestLocalClient_GenerateStream_BadJSONLinesSkipped(t *testing.T) {
 		// Send one bad line then a valid done chunk.
 		fmt.Fprintln(w, "bad-json-line")
 		enc := json.NewEncoder(w)
-		enc.Encode(LocalResponse{Response: "final", Done: true}) //nolint:errcheck
+		if err := enc.Encode(LocalResponse{Response: "final", Done: true}); err != nil {
+			t.Errorf("encode final chunk: %v", err)
+		}
 	}))
 	defer srv.Close()
 
@@ -295,7 +303,9 @@ func TestLocalClient_Embed_Success(t *testing.T) {
 		type embedResp struct {
 			Embedding []float32 `json:"embedding"`
 		}
-		json.NewEncoder(w).Encode(embedResp{Embedding: want}) //nolint:errcheck
+		if err := json.NewEncoder(w).Encode(embedResp{Embedding: want}); err != nil {
+			t.Errorf("encode embed response: %v", err)
+		}
 	}))
 	defer srv.Close()
 
@@ -333,7 +343,9 @@ func TestLocalClient_Embed_NonOKStatus(t *testing.T) {
 
 func TestLocalClient_Embed_BadJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		io.WriteString(w, "bad{json") //nolint:errcheck
+		if _, err := io.WriteString(w, "bad{json"); err != nil {
+			t.Errorf("write bad JSON: %v", err)
+		}
 	}))
 	defer srv.Close()
 

@@ -242,7 +242,7 @@ func TestChatRequestBinding_NoMessage(t *testing.T) {
 func TestChatRequestBinding_OnlyMessage(t *testing.T) {
 	data := `{"message": "hello"}`
 	var req ChatRequest
-	json.Unmarshal([]byte(data), &req)
+	_ = json.Unmarshal([]byte(data), &req)
 	if req.SessionID != "" {
 		t.Errorf("session_id should be empty, got %q", req.SessionID)
 	}
@@ -251,7 +251,7 @@ func TestChatRequestBinding_OnlyMessage(t *testing.T) {
 func TestChatRequestBinding_EmptyJSON(t *testing.T) {
 	data := `{}`
 	var req ChatRequest
-	json.Unmarshal([]byte(data), &req)
+	_ = json.Unmarshal([]byte(data), &req)
 	if req.Message != "" || req.SessionID != "" {
 		t.Error("empty JSON should result in empty fields")
 	}

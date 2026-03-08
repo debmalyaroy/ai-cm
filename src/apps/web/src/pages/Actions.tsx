@@ -476,6 +476,16 @@ export default function ActionsPage() {
                             </button>
                         ))}
                     </div>
+                    <button
+                        className="btn btn-ghost"
+                        onClick={loadActions}
+                        disabled={loading}
+                        title="Refresh"
+                        style={{ display: "flex", alignItems: "center", gap: 6 }}
+                    >
+                        <span style={{ display: "inline-block", animation: loading ? "spin 0.7s linear infinite" : "none" }}>↻</span>
+                        {loading ? "Refreshing…" : "Refresh"}
+                    </button>
                     <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
                         ✨ Create New Action
                     </button>

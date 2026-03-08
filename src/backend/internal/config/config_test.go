@@ -187,7 +187,9 @@ func TestEnvOverridesYAML(t *testing.T) {
 server:
   port: 9090
 `
-	os.WriteFile(yamlPath, []byte(yamlContent), 0644)
+	if err := os.WriteFile(yamlPath, []byte(yamlContent), 0644); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
 
 	// Env should override YAML
 	os.Setenv("PORT", "5555")

@@ -85,7 +85,9 @@ func handleChat(db *pgxpool.Pool, supervisor *agent.SupervisorAgent, llmClient l
 			sessionID, "user", req.Message); err != nil {
 			slog.WarnContext(reqCtx, "failed to store user message", "error", err)
 		}
-		db.Exec(reqCtx, "UPDATE chat_sessions SET updated_at = NOW() WHERE id = $1", sessionID)
+		if _, err := db.Exec(reqCtx, "UPDATE chat_sessions SET updated_at = NOW() WHERE id = $1", sessionID); err != nil {
+			slog.WarnContext(reqCtx, "failed to update session timestamp", "error", err)
+		}
 
 		// Get chat history for context (ASC order so oldest first = correct conversation flow)
 		var history []agent.Message
@@ -184,9 +186,13 @@ func handleChat(db *pgxpool.Pool, supervisor *agent.SupervisorAgent, llmClient l
 		metadataJSON := fmt.Sprintf(`{"agent": "%s", "suggestions": %s}`, output.AgentName, string(suggestionsBytes))
 
 		// Store assistant message and update session timestamp
-		db.Exec(reqCtx, "INSERT INTO chat_messages (session_id, role, content, metadata) VALUES ($1, $2, $3, $4)",
-			sessionID, "assistant", output.Response, metadataJSON)
-		db.Exec(reqCtx, "UPDATE chat_sessions SET updated_at = NOW() WHERE id = $1", sessionID)
+		if _, err := db.Exec(reqCtx, "INSERT INTO chat_messages (session_id, role, content, metadata) VALUES ($1, $2, $3, $4)",
+			sessionID, "assistant", output.Response, metadataJSON); err != nil {
+			slog.WarnContext(reqCtx, "failed to store assistant message", "error", err)
+		}
+		if _, err := db.Exec(reqCtx, "UPDATE chat_sessions SET updated_at = NOW() WHERE id = $1", sessionID); err != nil {
+			slog.WarnContext(reqCtx, "failed to update session timestamp", "error", err)
+		}
 
 		// Send done event
 		sendSSE(c.Writer, "done", map[string]string{"session_id": sessionID})
@@ -242,11 +248,13 @@ func deleteChatSession(db *pgxpool.Pool, supervisor *agent.SupervisorAgent) gin.
 		// Collect session summary before deleting — used for episodic memory
 		var firstMsg string
 		var msgCount int
-		db.QueryRow(reqCtx, `
+		if err := db.QueryRow(reqCtx, `
 			SELECT
 				COALESCE((SELECT content FROM chat_messages WHERE session_id=$1 AND role='user' ORDER BY created_at ASC LIMIT 1), ''),
 				(SELECT COUNT(*) FROM chat_messages WHERE session_id=$1)
-		`, sessionID, sessionID).Scan(&firstMsg, &msgCount)
+		`, sessionID, sessionID).Scan(&firstMsg, &msgCount); err != nil {
+			slog.WarnContext(reqCtx, "failed to query session summary", "error", err)
+		}
 
 		// Store episodic memory of the ended session in background (non-blocking)
 		if firstMsg != "" && msgCount > 0 {
@@ -285,7 +293,9 @@ func getChatSessions(db *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		slog.DebugContext(c.Request.Context(), "Fetching recent chat sessions")
 		// Prune sessions older than 30 days (best-effort, non-fatal)
-		db.Exec(c, `DELETE FROM chat_sessions WHERE created_at < NOW() - INTERVAL '30 days'`)
+		if _, err := db.Exec(c, `DELETE FROM chat_sessions WHERE created_at < NOW() - INTERVAL '30 days'`); err != nil {
+			slog.WarnContext(c.Request.Context(), "failed to prune old sessions", "error", err)
+		}
 
 		rows, err := db.Query(c, `
 			SELECT s.id, s.updated_at,

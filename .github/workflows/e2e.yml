@@ -40,24 +40,31 @@ jobs:
             PGPASSWORD=aicm_secret psql -h localhost -U aicm -d aicm -f "$f" || true
           done
 
-      - name: Build and start mock LLM
+      - name: Build mock LLM binary
         run: |
           cd infra/llm-mock
-          go run main.go &
-          # Wait until the mock server is accepting connections
-          for i in $(seq 1 15); do
+          go build -o /tmp/llm-mock .
+
+      - name: Start mock LLM
+        run: |
+          /tmp/llm-mock &
+          # Wait until the mock server is accepting connections.
+          # Binary starts in <1s so 30 retries is ample.
+          for i in $(seq 1 30); do
             if curl -sf http://localhost:11434/api/health > /dev/null 2>&1; then
-              echo "Mock LLM is ready."
-              break
+              echo "Mock LLM is ready after ${i}s."
+              exit 0
             fi
-            echo "Waiting for mock LLM... ($i/15)"
+            echo "Waiting for mock LLM... ($i/30)"
             sleep 1
           done
+          echo "::error::Mock LLM did not start within 30 seconds"
+          exit 1
 
       - name: Run E2E tests
         working-directory: ./src/backend
         env:
           DATABASE_URL: postgres://aicm:aicm_secret@localhost:5432/aicm?sslmode=disable
           LLM_PROVIDER: local
-          OLLAMA_BASE_URL: http://localhost:11434
+          LOCAL_LLM_URL: http://localhost:11434/api/generate
         run: go test ./tests/... -v -count=1 -timeout 180s
