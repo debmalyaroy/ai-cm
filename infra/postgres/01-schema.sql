@@ -112,6 +112,8 @@ CREATE TABLE action_log (
     product_id UUID REFERENCES dim_products(id),
     confidence_score DECIMAL(3,2) DEFAULT 0,
     status VARCHAR(20) DEFAULT 'pending',
+    priority VARCHAR(10) DEFAULT 'medium',
+    expected_impact TEXT DEFAULT '',
     metadata JSONB DEFAULT '{}',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -200,6 +202,15 @@ CREATE TABLE IF NOT EXISTS alerts (
     acknowledged BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE user_preferences (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id VARCHAR(100) NOT NULL DEFAULT 'demo_user',
+    key VARCHAR(100) NOT NULL,
+    value TEXT NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(user_id, key)
 );
 
 -- INDEXES

@@ -2,8 +2,44 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { streamChat, chatAPI, alertsAPI, type ChatSSEEvent, type ChatSession } from "@/lib/api";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 type DockPosition = "right" | "left" | "bottom";
+
+interface SQLResultPayload {
+    columns: string[];
+    rows: Record<string, unknown>[];
+    row_count: number;
+}
+
+function InlineChart({ data }: { data: SQLResultPayload }) {
+    const row0 = data.rows[0] ?? {};
+    const strCols = data.columns.filter(c => typeof row0[c] === "string");
+    const numCols = data.columns.filter(c => typeof row0[c] === "number");
+    if (!strCols.length || !numCols.length || data.rows.length < 2) return null;
+    const xKey = strCols[0];
+    const yKey = numCols[0];
+    const chartData = data.rows.slice(0, 10).map(r => ({
+        [xKey]: String(r[xKey] ?? ""),
+        [yKey]: Number(r[yKey] ?? 0),
+    }));
+    return (
+        <div style={{ marginTop: 10, background: "var(--color-bg)", borderRadius: 8, padding: "8px 4px 4px" }}>
+            <div style={{ fontSize: 11, color: "var(--color-text-secondary)", marginBottom: 2, paddingLeft: 8 }}>
+                {yKey} by {xKey}
+            </div>
+            <ResponsiveContainer width="100%" height={160}>
+                <BarChart data={chartData} margin={{ top: 0, right: 8, bottom: 28, left: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+                    <XAxis dataKey={xKey} tick={{ fontSize: 9 }} angle={-35} textAnchor="end" interval={0} />
+                    <YAxis tick={{ fontSize: 9 }} width={40} />
+                    <Tooltip contentStyle={{ fontSize: 12, background: "var(--color-surface)", border: "1px solid var(--color-border)" }} />
+                    <Bar dataKey={yKey} fill="var(--color-primary)" radius={[3, 3, 0, 0]} />
+                </BarChart>
+            </ResponsiveContainer>
+        </div>
+    );
+}
 
 interface SuggestionItem {
     label: string;
@@ -19,6 +55,11 @@ interface ChatMessage {
     reasoning?: Array<{ type: string; content: string }>;
     isStreaming?: boolean;
     suggestions?: SuggestionItem[];
+    confidenceScore?: number;
+    dataSource?: string;
+    isError?: boolean;
+    retryQuery?: string;
+    chartData?: SQLResultPayload;
 }
 
 interface CreateAlertForm {
@@ -62,9 +103,14 @@ export default function ChatPanel() {
         if (saved === "left" || saved === "right" || saved === "bottom") setDockPosition(saved);
     }, []);
 
-    // When panel opens with no active session: offer to restore the most recent session
+    // When panel opens with no active session: create a session + offer to restore the most recent
     useEffect(() => {
         if (!isOpen || messages.length > 0 || sessionId) return;
+        // Create a session immediately so it persists even before the first message
+        chatAPI.createSession()
+            .then(({ session_id }) => setSessionId(session_id))
+            .catch(() => {/* non-fatal — session will be created on first message */});
+        // Also check for a previous session to offer restore
         chatAPI.getSessions().then(sessions => {
             if (sessions.length > 0) setRestoreOffer(sessions[0]);
         }).catch(() => {/* non-fatal */});
@@ -173,16 +219,34 @@ export default function ChatPanel() {
                             prev.map((m) => (m.id === assistantId ? { ...m, reasoning } : m))
                         );
                         break;
-                    case "response":
+                    case "data": {
+                        // Store SQL result payload for chart rendering
+                        const payload = event.data as SQLResultPayload;
+                        if (payload && Array.isArray(payload.rows) && payload.rows.length > 1) {
+                            setMessages((prev) =>
+                                prev.map((m) => m.id === assistantId ? { ...m, chartData: payload } : m)
+                            );
+                        }
+                        break;
+                    }
+                    case "response": {
+                        const respData = event.data as { content: string; confidence_score?: number; data_source?: string };
                         setMessages((prev) =>
                             prev.map((m) =>
                                 m.id === assistantId
-                                    ? { ...m, content: (event.data as { content: string }).content, isStreaming: false }
+                                    ? {
+                                        ...m,
+                                        content: respData.content,
+                                        isStreaming: false,
+                                        confidenceScore: respData.confidence_score,
+                                        dataSource: respData.data_source,
+                                    }
                                     : m
                             )
                         );
                         setStatus("");
                         break;
+                    }
                     case "suggestions": {
                         const sugData = event.data as { questions: SuggestionItem[] | string[] };
                         const items: SuggestionItem[] = sugData.questions.map((q: SuggestionItem | string) => {
@@ -200,7 +264,13 @@ export default function ChatPanel() {
                         setMessages((prev) =>
                             prev.map((m) =>
                                 m.id === assistantId
-                                    ? { ...m, content: `Error: ${(event.data as { error: string }).error}`, isStreaming: false }
+                                    ? {
+                                        ...m,
+                                        content: `Error: ${(event.data as { error: string }).error}`,
+                                        isStreaming: false,
+                                        isError: true,
+                                        retryQuery: msgText,
+                                    }
                                     : m
                             )
                         );
@@ -213,7 +283,7 @@ export default function ChatPanel() {
                 setMessages((prev) =>
                     prev.map((m) =>
                         m.id === assistantId
-                            ? { ...m, content: `Connection error: ${err.message}`, isStreaming: false }
+                            ? { ...m, content: `Connection error: ${err.message}`, isStreaming: false, isError: true, retryQuery: msgText }
                             : m
                     )
                 );
@@ -286,8 +356,19 @@ export default function ChatPanel() {
     const loadSessions = async () => {
         try {
             const data = await chatAPI.getSessions();
-            setSessions(data.slice(0, 10));
+            setSessions(data);
         } catch { setSessions([]); }
+    };
+
+    const handleDeleteSession = async (sid: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        try {
+            await chatAPI.deleteSession(sid);
+            setSessions(prev => prev.filter(s => s.id !== sid));
+            if (sid === sessionId) {
+                handleNewSession();
+            }
+        } catch { /* non-fatal */ }
     };
 
     const loadSession = async (sid: string) => {
@@ -417,10 +498,19 @@ export default function ChatPanel() {
                                 <div className="chat-history-empty">No sessions yet</div>
                             ) : (
                                 sessions.map(s => (
-                                    <button key={s.id} className={`chat-history-item ${s.id === sessionId ? "active" : ""}`} onClick={() => loadSession(s.id)}>
-                                        <span className="chat-history-msg">{s.first_message.slice(0, 50)}</span>
-                                        <span className="chat-history-date">{new Date(s.created_at).toLocaleDateString()}</span>
-                                    </button>
+                                    <div key={s.id} className={`chat-history-item ${s.id === sessionId ? "active" : ""}`} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                                        <button style={{ flex: 1, background: "none", border: "none", textAlign: "left", cursor: "pointer", padding: "6px 4px", minWidth: 0 }} onClick={() => loadSession(s.id)}>
+                                            <span className="chat-history-msg">{s.first_message.slice(0, 50)}</span>
+                                            <span className="chat-history-date">{new Date(s.updated_at).toLocaleDateString()}</span>
+                                        </button>
+                                        <button
+                                            title="Delete session"
+                                            onClick={(e) => handleDeleteSession(s.id, e)}
+                                            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-secondary)", fontSize: 13, padding: "4px 6px", flexShrink: 0, borderRadius: 4 }}
+                                            onMouseEnter={e => (e.currentTarget.style.color = "var(--color-danger)")}
+                                            onMouseLeave={e => (e.currentTarget.style.color = "var(--color-text-secondary)")}
+                                        >🗑</button>
+                                    </div>
                                 ))
                             )}
                         </div>
@@ -508,6 +598,39 @@ export default function ChatPanel() {
                                                             ),
                                                         }}
                                                     >{msg.content}</ReactMarkdown>
+                                                    {/* Confidence score badge */}
+                                                    {!msg.isError && msg.confidenceScore !== undefined && msg.confidenceScore > 0 && (
+                                                        <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--color-text-secondary)" }}>
+                                                            <span style={{
+                                                                padding: "2px 8px", borderRadius: 10,
+                                                                background: msg.confidenceScore >= 0.85 ? "rgba(34,197,94,0.12)" : msg.confidenceScore >= 0.70 ? "rgba(234,179,8,0.12)" : "rgba(239,68,68,0.12)",
+                                                                color: msg.confidenceScore >= 0.85 ? "var(--color-success)" : msg.confidenceScore >= 0.70 ? "var(--color-warning)" : "var(--color-danger)",
+                                                                fontWeight: 600,
+                                                            }}>
+                                                                {Math.round(msg.confidenceScore * 100)}% confidence
+                                                            </span>
+                                                            {msg.dataSource && (
+                                                                <span style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>• {msg.dataSource}</span>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                    {/* Inline chart when SQL data is available */}
+                                                    {!msg.isError && msg.chartData && (
+                                                        <InlineChart data={msg.chartData} />
+                                                    )}
+                                                    {/* Retry button for error responses */}
+                                                    {msg.isError && msg.retryQuery && (
+                                                        <button
+                                                            className="btn btn-ghost"
+                                                            style={{ marginTop: 8, fontSize: 12, padding: "4px 12px" }}
+                                                            onClick={() => {
+                                                                setMessages(prev => prev.filter(m => m.id !== msg.id));
+                                                                handleSend(msg.retryQuery);
+                                                            }}
+                                                        >
+                                                            ↻ Retry
+                                                        </button>
+                                                    )}
                                                 </div>
                                             )}
                                         </>

@@ -82,6 +82,8 @@ func (a *AnalystAgent) Process(ctx context.Context, input *Input) (*Output, erro
 					Type:    "observation",
 					Content: "Vector-cached SQL executed successfully",
 				})
+				output.ConfidenceScore = 0.90
+				output.DataSource = "database (cached)"
 				return a.summarizeResults(ctx, input, output, cachedSQL, queryResult)
 			}
 			slog.WarnContext(ctx, "Analyst: vector-cached SQL failed, falling through", "error", execErr)
@@ -106,6 +108,8 @@ func (a *AnalystAgent) Process(ctx context.Context, input *Input) (*Output, erro
 				Type:    "observation",
 				Content: "Cached SQL executed successfully",
 			})
+			output.ConfidenceScore = 0.90
+			output.DataSource = "database (cached)"
 			// Jump to summarization with cachedSQL and queryResult
 			return a.summarizeResults(ctx, input, output, cachedSQL, queryResult)
 		}
@@ -198,8 +202,10 @@ func (a *AnalystAgent) Process(ctx context.Context, input *Input) (*Output, erro
 			Type:    "observation",
 			Content: "SQL executed successfully",
 		})
-		if rows, ok := queryResult.([]map[string]any); ok {
-			slog.DebugContext(ctx, "Analyst: SQL returned rows", "row_count", len(rows))
+		if resultMap, ok := queryResult.(map[string]any); ok {
+			if rows, ok2 := resultMap["rows"].([]map[string]any); ok2 {
+				slog.DebugContext(ctx, "Analyst: SQL returned rows", "row_count", len(rows))
+			}
 		}
 		break
 	}
@@ -207,6 +213,10 @@ func (a *AnalystAgent) Process(ctx context.Context, input *Input) (*Output, erro
 	if err != nil {
 		return nil, fmt.Errorf("failed after %d attempts: %w", maxRetries, err)
 	}
+
+	// Set confidence based on fresh LLM-generated SQL
+	output.ConfidenceScore = 0.85
+	output.DataSource = "database"
 
 	// Cache the successful SQL in both L1 (in-process) and L2 (vector store)
 	a.sqlCache.Put(input.Query, sqlQuery)

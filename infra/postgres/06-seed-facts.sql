@@ -82,15 +82,17 @@ INSERT INTO business_context (content, metadata) VALUES
 ('Communication Templates: Price match notifications go to seller within 2 hours. Stockout alerts escalate to category manager. Weekly performance reports auto-generated every Monday. Quarterly reviews in March, June, Sep, Dec.', '{"type":"policy","domain":"communication","version":"1.2"}');
 
 -- INITIAL ACTIONS (for demo)
-INSERT INTO action_log (title, description, action_type, category, product_id, confidence_score, status) VALUES
-('Price Match: Pampers Active Baby Small', 'Amazon selling at 12% lower (₹703 vs MRP ₹799). Market share at risk. Recommend matching to ₹710.', 'price_match', 'Diapers', 'c0000001-0000-0000-0000-000000000001', 0.87, 'pending'),
-('Price Match: Huggies Wonder Pants Medium', 'Meesho offering 15% discount. Three competitors undercutting MRP. Urgent price action needed.', 'price_match', 'Diapers', 'c0000001-0000-0000-0000-000000000005', 0.91, 'pending'),
-('Restock Alert: Huggies Wonder Pants Small (East)', 'East India stock critically low (<15 units across 3 locations). Predicted stockout in 5 days.', 'restock', 'Diapers', 'c0000001-0000-0000-0000-000000000004', 0.92, 'pending'),
-('Restock Alert: Cerelac Wheat Apple (East)', 'Kolkata and Patna below reorder level. Baby food demand steady. Recommend immediate PO.', 'restock', 'Baby Cereals', 'c0000001-0000-0000-0000-000000000031', 0.85, 'pending'),
-('Run Promotion: LuvLap Galaxy Cradle (West)', 'West region inventory 2.5x monthly demand. 45 days supply. Recommend 10-15% discount.', 'promotion', 'Baby Furniture', 'c0000001-0000-0000-0000-000000000061', 0.74, 'pending'),
-('Run Promotion: Chicco Polly Chair', 'Slow-moving SKU with 60+ days supply. Consider bundling with stroller for clearance.', 'promotion', 'Baby Furniture', 'c0000001-0000-0000-0000-000000000065', 0.68, 'pending'),
-('Delist: Prenatal Vitamins', 'Sales declined 40% over 3 months. Lowest margin in Maternity Care category.', 'delist', 'Maternity Care', 'c0000001-0000-0000-0000-000000000111', 0.65, 'pending'),
-('Brand Switch: Pampers to MamyPoko (South)', 'MamyPoko gaining 4% weekly share in South at Pampers expense.', 'price_match', 'Diapers', NULL, 0.79, 'pending');
+-- Truncate child table first to avoid FK constraint violations, then parent
+TRUNCATE TABLE action_comments, action_log;
+INSERT INTO action_log (title, description, action_type, category, product_id, confidence_score, status, priority, expected_impact) VALUES
+('Price Match: Pampers Active Baby Small', 'Amazon selling at 12% lower (₹703 vs MRP ₹799). Market share at risk. Recommend matching to ₹710.', 'price_match', 'Diapers', 'c0000001-0000-0000-0000-000000000001', 0.87, 'pending', 'high', 'Prevent ~8% market share loss, recover ₹2.1L/month revenue'),
+('Price Match: Huggies Wonder Pants Medium', 'Meesho offering 15% discount. Three competitors undercutting MRP. Urgent price action needed.', 'price_match', 'Diapers', 'c0000001-0000-0000-0000-000000000005', 0.91, 'pending', 'high', 'Protect ₹3.4L/month revenue; 15% churn risk if not acted upon'),
+('Restock Alert: Huggies Wonder Pants Small (East)', 'East India stock critically low (<15 units across 3 locations). Predicted stockout in 5 days.', 'restock', 'Diapers', 'c0000001-0000-0000-0000-000000000004', 0.92, 'pending', 'high', 'Avoid ₹1.8L revenue loss from stockout over next 7 days'),
+('Restock Alert: Cerelac Wheat Apple (East)', 'Kolkata and Patna below reorder level. Baby food demand steady. Recommend immediate PO.', 'restock', 'Baby Cereals', 'c0000001-0000-0000-0000-000000000031', 0.85, 'pending', 'high', 'Maintain ₹80K/week revenue stream; prevent competitor substitution'),
+('Run Promotion: LuvLap Galaxy Cradle (West)', 'West region inventory 2.5x monthly demand. 45 days supply. Recommend 10-15% discount.', 'promotion', 'Baby Furniture', 'c0000001-0000-0000-0000-000000000061', 0.74, 'pending', 'medium', 'Clear 40 units, free ₹1.2L of working capital'),
+('Run Promotion: Chicco Polly Chair', 'Slow-moving SKU with 60+ days supply. Consider bundling with stroller for clearance.', 'promotion', 'Baby Furniture', 'c0000001-0000-0000-0000-000000000065', 0.68, 'pending', 'medium', 'Reduce excess inventory by 25 units, improve category turns'),
+('Delist: Prenatal Vitamins', 'Sales declined 40% over 3 months. Lowest margin in Maternity Care category.', 'delist', 'Maternity Care', 'c0000001-0000-0000-0000-000000000111', 0.65, 'pending', 'low', 'Free shelf space for higher-margin SKUs; save ₹15K/month markdown cost'),
+('Brand Switch: Pampers to MamyPoko (South)', 'MamyPoko gaining 4% weekly share in South at Pampers expense.', 'price_match', 'Diapers', NULL, 0.79, 'pending', 'high', 'Defend ₹5L/month Pampers revenue in South region');
 
 -- AGENT MEMORY SEEDS
 INSERT INTO agent_memory (agent_type, memory_type, content, metadata) VALUES

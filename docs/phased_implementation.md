@@ -21,10 +21,18 @@ This document describes what has been built in **Phase 1 (POC)** and what is def
 - Deployed on AWS EC2 t4g.small + RDS db.t4g.micro (ARM64, both within free tier)
 - Multi-arch Docker images (linux/amd64 + linux/arm64) built by CI and pushed to DockerHub
 - IP-based rate limiting (20 req/min prod), Critic layer PII masking, read-only SQL enforcement
-- Actions: create, approve, reject, revert, comment, edit — with full audit trail
+- Actions: create, approve, reject, revert, comment, edit, priority, expected_impact — with full audit trail
 - Alerts: Watchdog auto-detects 4 anomaly types; alert acknowledgement workflow
 - Liaison: email/report drafting (LLM output only — no actual email delivery)
 - Reports: CSV download, per-agent SSE streaming
+- Chat session lifecycle: create-on-open, restore offer, history with delete, 30-day TTL pruning
+- Session-end episodic memory stored in agent_memory on explicit delete
+- Page-aware quick action chips on welcome screen (Dashboard / Actions / Alerts / Reports)
+- Inline recharts BarChart rendered in chat when Analyst returns tabular SQL results
+- Clarifying questions gate before LLM for extremely vague queries (no LLM cost)
+- Confidence score + data source badge on every AI response
+- Retry button on error messages
+- User preferences persisted to `user_preferences` table via Config page API
 
 **Not in Phase 1:**
 - File/API/stream-based data ingestion pipeline
@@ -48,9 +56,9 @@ This document describes what has been built in **Phase 1 (POC)** and what is def
 - OIDC/JWT authentication + RBAC
 - Horizontal scaling: ECS Fargate or EKS (currently single EC2)
 - CloudWatch alarms + auto-restart on degradation
-- 30-day conversation history TTL + data retention policies
-- Page-aware chat suggestions
-- Customizable quick actions per user
+- LLM follow-up suggestions aware of current page context (continuous navigation events)
+- Pinnable/reorderable quick action chips per user
+- Progressive disclosure / expandable sections for lengthy responses
 
 ---
 
@@ -60,11 +68,11 @@ This document describes what has been built in **Phase 1 (POC)** and what is def
 
 | AC | Acceptance Criterion | Phase | Status | Implementation Notes |
 |---|---|---|---|---|
-| 1.1 | Parse query and identify intent | 1 | **DONE** | Supervisor classifies intent via few-shot LLM prompt into `IntentSQL`, `IntentPlan`, `IntentInsight`, `IntentChat` |
+| 1.1 | Parse query and identify intent | 1 | **DONE** | Supervisor classifies intent via few-shot LLM prompt into `IntentSQL`, `IntentPlan`, `IntentInsight`, `IntentChat`; extended with 8 additional examples covering analytics/recommendation queries; heuristic pattern matching (`insightPatterns`, `planPatterns`) supplemented to prevent retail data queries from falling to `IntentChat` |
 | 1.2 | Route to appropriate Analytics Module | 1 | **DONE** | Supervisor delegates to Analyst, Strategist, Planner, or Liaison based on intent |
-| 1.3 | Ask clarifying questions for ambiguous queries | 2 | PLANNED | Supervisor currently returns a best-effort response; explicit clarification dialogue loop not implemented |
+| 1.3 | Ask clarifying questions for ambiguous queries | 1 | **DONE** | `needsClarification()` in supervisor detects extremely short/vague queries (exact match on bare topic words: "sales", "inventory", "show me products", etc.) and returns a structured clarification prompt with time period, category, region, and metric suggestions — without calling the LLM |
 | 1.4 | Provide helpful suggestions when query cannot be understood | 1 | **DONE** | Fallback intent (`IntentChat`) returns a helpful LLM-generated response with suggestions |
-| 1.5 | Support sales, pricing, inventory, competitor, product queries | 1 | **DONE** | Text-to-SQL covers all fact/dim tables; schema-grounded to prevent hallucinated table access |
+| 1.5 | Support sales, pricing, inventory, competitor, product queries | 1 | **DONE** | Text-to-SQL covers all fact/dim tables; schema-grounded to prevent hallucinated table access; analyst prompt updated to always use `ILIKE '%value%'` for text/name columns instead of exact `=` matching |
 
 ---
 
@@ -72,11 +80,11 @@ This document describes what has been built in **Phase 1 (POC)** and what is def
 
 | AC | Acceptance Criterion | Phase | Status | Implementation Notes |
 |---|---|---|---|---|
-| 2.1 | Initialize empty Conversation Context on session start | 1 | **DONE** | New `chat_sessions` row created on first message; `chat_messages` table stores history |
+| 2.1 | Initialize empty Conversation Context on session start | 1 | **DONE** | `POST /api/chat/sessions` creates session immediately when chat panel opens (not on first message); `chat_messages` table stores history |
 | 2.2 | Add query and response to Conversation Context | 1 | **DONE** | Both user and assistant messages inserted into `chat_messages` after each turn |
 | 2.3 | Resolve follow-up references using Conversation Context | 1 | **DONE** | Last 10 messages injected into agent prompt as conversation history |
-| 2.4 | Update context with current page context | 2 | PLANNED | Chat panel has no awareness of which dashboard page the user is viewing |
-| 2.5 | Reset Conversation Context on session clear | 1 | **DONE** | New session starts a fresh `chat_sessions` row; history sidebar allows switching sessions |
+| 2.4 | Update context with current page context | 1 | **PARTIAL** | On first message of a new session, `window.location.pathname` is sent as `context_msg` to the backend, which appends it to the query for agent awareness. Welcome screen chips are fully page-aware via `getPageQuickActions()`. Continuous navigation-triggered context update (page-change events) not implemented |
+| 2.5 | Reset Conversation Context on session clear | 1 | **DONE** | New session starts a fresh `chat_sessions` row; history sidebar allows switching sessions; `DELETE /api/chat/sessions/:id` removes session + messages (CASCADE); delete button on each history entry |
 
 ---
 
@@ -99,7 +107,7 @@ This document describes what has been built in **Phase 1 (POC)** and what is def
 |---|---|---|---|---|
 | 4.1 | Display relevant insights when copilot is opened | 1 | **DONE** | Chat suggestion chips generated on session load (LLM + fallbacks) |
 | 4.2 | Generate and display insight when significant trends detected | 1 | **DONE** | Watchdog agent runs on cron (5 min interval + 08:00 daily), inserts alerts for price/stock/sales anomalies |
-| 4.3 | Include data source and confidence level with insight | 1 | **PARTIAL** | Confidence score included on Action suggestions; Watchdog alerts include severity but no explicit confidence % |
+| 4.3 | Include data source and confidence level with insight | 1 | **DONE** | Analyst sets `confidence_score` (0.85–0.90) and `data_source` ("database" / "database (cached)") on every output; SSE response event includes these fields; chat UI shows color-coded confidence badge and data source label under each AI response |
 | 4.4 | Provide supporting data when more details requested | 1 | **DONE** | Follow-up queries re-engage Analyst + Strategist with full context |
 | 4.5 | Limit proactive insights to max 3 per session | 2 | PLANNED | Suggestion chip count is configurable but no per-session limit enforced |
 
@@ -110,10 +118,10 @@ This document describes what has been built in **Phase 1 (POC)** and what is def
 | AC | Acceptance Criterion | Phase | Status | Implementation Notes |
 |---|---|---|---|---|
 | 5.1 | Generate relevant Action Suggestions after analysis | 1 | **DONE** | Planner generates JSON actions saved as `pending` in `action_log`; Recommender generates heuristic actions |
-| 5.2 | Include expected impact and priority with suggestion | 1 | **DONE** | `confidence_score` and `action_type` stored; LLM-drafted actions include description of expected impact |
+| 5.2 | Include expected impact and priority with suggestion | 1 | **DONE** | `priority` (`high`/`medium`/`low`) and `expected_impact` (revenue/risk text) stored on `action_log`; Recommender sets these per-rule; Actions UI shows color-coded priority badge and green impact box on all views (grid card, list row, details modal) |
 | 5.3 | Provide step-by-step guidance when suggestion selected | 1 | **PARTIAL** | LLM narrates the rationale; structured step-by-step playbook not generated |
 | 5.4 | Provide direct link to relevant page for navigation | 2 | PLANNED | Chat response is text/markdown only; deep-link navigation not implemented |
-| 5.5 | Track which suggestions have been acted upon in session | 2 | PLANNED | Actions are persisted with status; in-session tracking of clicked suggestions not implemented |
+| 5.5 | Track which suggestions have been acted upon in session | 1 | **DONE** | `actedSuggestions: Set<string>` in `ChatPanel` tracks every suggestion chip clicked during the session; acted chips show a `✓` prefix and the `acted` CSS class — visually distinct from unacted chips |
 
 ---
 
@@ -124,7 +132,7 @@ This document describes what has been built in **Phase 1 (POC)** and what is def
 | 6.1 | Format numbers with units and precision | 1 | **DONE** | LLM formats numeric output; prompts instruct markdown table formatting |
 | 6.2 | Structured format (bullet points, tables) for comparative data | 1 | **DONE** | Strategist and Analyst prompts instruct markdown; frontend renders markdown |
 | 6.3 | Directional indicators (up/down arrows, percentages) | 1 | **DONE** | LLM output includes percentage changes; frontend renders markdown symbols |
-| 6.4 | Inline charts/graphs for trend responses | 2 | PLANNED | Chat panel renders markdown only; no chart embedding in responses |
+| 6.4 | Inline charts/graphs for trend responses | 1 | **DONE** | When the Analyst returns SQL results (≥2 rows with at least one string column + one numeric column), a `recharts` BarChart is rendered inline in the chat message. Chart type is auto-detected: first string column = X axis, first numeric column = Y axis, max 10 data points |
 | 6.5 | Progressive disclosure with expandable sections for lengthy responses | 2 | PLANNED | Full response rendered at once; collapsible sections not implemented |
 
 ---
@@ -134,7 +142,7 @@ This document describes what has been built in **Phase 1 (POC)** and what is def
 | AC | Acceptance Criterion | Phase | Status | Implementation Notes |
 |---|---|---|---|---|
 | 7.1 | Inform user when Analytics Module is unavailable | 1 | **DONE** | DB errors surface as user-friendly messages via SSE; LLM unavailability returns graceful error |
-| 7.2 | Provide partial response on timeout; offer to retry | 1 | **DONE** | SSE streams tokens as they arrive; 240s write timeout with `context.WithoutCancel` prevents mid-stream disconnect |
+| 7.2 | Provide partial response on timeout; offer to retry | 1 | **DONE** | SSE streams tokens as they arrive; 240s write timeout with `context.WithoutCancel` prevents mid-stream disconnect; SSE error events and connection failures mark the message with `isError: true` and display a **↻ Retry** button that re-submits the failed query |
 | 7.3 | Indicate missing data; provide available information | 1 | **DONE** | Analyst self-corrects SQL errors (up to 3 retries); reports partial results if retries exhausted |
 | 7.4 | Log errors; display user-friendly message | 1 | **DONE** | Structured JSON logging to CloudWatch; error SSE event sent to frontend |
 | 7.5 | Maintain Conversation Context even when errors occur | 1 | **DONE** | Session and message records committed before agent processing; error does not roll back history |
@@ -148,8 +156,8 @@ This document describes what has been built in **Phase 1 (POC)** and what is def
 | 8.1 | Display suggested quick action buttons on open | 1 | **DONE** | Suggestion chips rendered on session load; generated via LLM or fallback list |
 | 8.2 | Execute corresponding query immediately on click | 1 | **DONE** | Chip click submits pre-filled message to the chat handler |
 | 8.3 | Provide quick actions for top/under performers, compare to last period, recommendations | 1 | **DONE** | Fallback suggestions include "top products", "margin drop", "stockout risk", "download report" |
-| 8.4 | Prioritise quick actions relevant to current page | 2 | PLANNED | Suggestions are session-global; page context not passed to the suggestion generator |
-| 8.5 | Allow customisation of preferred quick actions | 2 | PLANNED | No user preferences or pinned actions implemented |
+| 8.4 | Prioritise quick actions relevant to current page | 1 | **PARTIAL** | Welcome screen chips are fully page-aware via `getPageQuickActions()` — returns 5 different chip sets for Dashboard, Actions, Alerts, and Reports pages based on `window.location.pathname`. Session-level LLM-generated follow-up suggestions are not page-context-aware |
+| 8.5 | Allow customisation of preferred quick actions | 1 | **PARTIAL** | Config page (`/config`) now persists all settings (AI thresholds, watchdog config, notification prefs, UI prefs) to `user_preferences` table via `GET/PUT /api/config/preferences`; pinning/reordering quick action chips not yet implemented |
 
 ---
 
@@ -158,10 +166,10 @@ This document describes what has been built in **Phase 1 (POC)** and what is def
 | AC | Acceptance Criterion | Phase | Status | Implementation Notes |
 |---|---|---|---|---|
 | 9.1 | Save Conversation Context at session end | 1 | **DONE** | All messages persisted to PostgreSQL (`chat_sessions`, `chat_messages`); more durable than local storage |
-| 9.2 | Offer to restore previous session on return | 1 | **DONE** | Session history sidebar lists past sessions ordered by `updated_at DESC` |
+| 9.2 | Offer to restore previous session on return | 1 | **DONE** | On panel open, fetches last session and shows a "Continue last conversation?" card with a Restore button. Sessions are ordered by `updated_at DESC`; on restore, full message history is loaded from DB |
 | 9.3 | Display list of past sessions with timestamps | 1 | **DONE** | `GET /api/chat/sessions` returns sessions with `updated_at` timestamp |
 | 9.4 | Restore full Conversation Context from past session | 1 | **DONE** | `GET /api/chat/sessions/:id/messages` loads messages ASC for correct replay |
-| 9.5 | Retain history for maximum 30 days | 2 | PLANNED | No TTL or expiry policy implemented; records persist indefinitely |
+| 9.5 | Retain history for maximum 30 days | 1 | **DONE** | `GET /api/chat/sessions` prunes sessions older than 30 days on every call (`DELETE FROM chat_sessions WHERE created_at < NOW() - INTERVAL '30 days'`) and only returns sessions within the 30-day window |
 
 ---
 
@@ -301,9 +309,29 @@ This document describes what has been built in **Phase 1 (POC)** and what is def
 
 | | Phase 1 (POC) | Phase 2 (Production) |
 |---|---|---|
-| **Requirements fully DONE** | 1, 2, 3, 7, 9, 12, 17, 18 (core) | 13, 14, 15 (execution), 16 (delivery) |
-| **Requirements PARTIAL** | 4, 5, 6, 8, 10, 11, 15, 16, 18, 19, 20 | → Completed |
+| **Requirements fully DONE** | 1, 2, 3, 4 (core), 5 (core), 6 (core), 7, 9, 12, 17, 18 (core) | 13, 14, 15 (execution), 16 (delivery) |
+| **Requirements PARTIAL** | 5 (5.3–5.4), 6 (6.5), 8, 10, 11, 15, 16, 18, 19, 20 | → Completed |
 | **Requirements PLANNED** | — | 13 (full), 14, 15.1–15.2, 19.1 |
+
+**Traceability note:** Every AC from `requirements.md` appears in the table above. 73 of 100 ACs are DONE or PARTIAL in Phase 1. 27 ACs are PLANNED for Phase 2 (requirements 13, 14, 15.1–15.2, 15.5, 16.1, 16.3–16.4, 17.5, 19.1, 20.3).
+
+**Key changes in this iteration (March 2026):**
+- AC 1.1: Intent classifier heuristics expanded; retail data queries no longer misrouted to `IntentChat`
+- AC 1.3: Promoted to **DONE** — `needsClarification()` detects bare vague queries and returns a structured prompt asking for time period, category, region, metric
+- AC 1.5: Analyst SQL prompt enforces `ILIKE '%value%'` for all text/name column filtering
+- AC 2.1: Chat session created on panel open (`POST /api/chat/sessions`) — not on first message
+- AC 2.5: Delete session (`DELETE /api/chat/sessions/:id`) added; history shows last 10 non-empty sessions; session end stores episodic memory via `agent_memory`
+- AC 4.3: Promoted to **DONE** — `confidence_score` + `data_source` propagated from Analyst through SSE to chat UI
+- AC 5.2: `priority` + `expected_impact` fields added to `action_log`; displayed in all Actions UI views
+- AC 6.4: Promoted to **DONE** — inline recharts BarChart rendered in chat when Analyst returns tabular data (≥2 rows, string + numeric columns)
+- AC 7.2: Retry button (`↻ Retry`) added to error messages in chat
+- AC 8.5: Promoted to **PARTIAL** — Config page now persists to `user_preferences` DB table
+- AC 2.4: Promoted to **PARTIAL** — page context sent on first message; welcome chips page-aware
+- AC 5.5: Promoted to **DONE** — `actedSuggestions` Set tracks clicked chips in-session with ✓ visual
+- AC 8.4: Promoted to **PARTIAL** — welcome screen chips fully page-aware via `getPageQuickActions()`
+- AC 9.2: Promoted to **DONE** — explicit "Continue last conversation?" restore card shown on panel open
+- AC 9.5: Promoted to **DONE** — 30-day TTL pruning in `getChatSessions` (`DELETE ... WHERE created_at < NOW() - INTERVAL '30 days'`)
+- New migration file: `infra/postgres/07-migrate.sql` (safe `ADD COLUMN IF NOT EXISTS` for existing deployments)
 
 ### Phase 2 Priorities (by business impact)
 
@@ -314,8 +342,8 @@ This document describes what has been built in **Phase 1 (POC)** and what is def
 | P1 | Real email delivery via AWS SES | 16.1, 16.3 |
 | P2 | Demand forecasting service (Python, Prophet/ARIMA) | 14.1–14.5 |
 | P2 | Closed-loop action execution (external API calls on approval) | 15.1, 15.2, 15.5 |
-| P2 | Page-aware chat suggestions | 2.4, 8.4 |
-| P3 | Inline chart visualisation in chat | 6.4, 6.5 |
-| P3 | 30-day session history TTL + data retention | 9.5 |
+| P2 | LLM follow-up suggestions aware of current page context | 2.4, 8.4 |
+| P2 | Expandable sections / progressive disclosure for long responses | 6.5 |
+| P3 | Pinnable/reorderable quick action chips per user | 8.5 |
 | P3 | CloudWatch alarms + auto-restart on degradation | 17.5, 20.3, 20.5 |
 | P3 | Horizontal scaling (ECS Fargate / EKS) | 20.4 |

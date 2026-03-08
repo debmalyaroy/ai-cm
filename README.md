@@ -152,13 +152,18 @@ Built on a high-performance **Golang Monolith**:
 ---
 
 ## 🚀 Key Features
-1.  **Conversational Data Analysis:** "Why did margin drop in East?" (No SQL needed).
+1.  **Conversational Data Analysis:** "Why did margin drop in East?" (No SQL needed). Smart ILIKE matching for product and brand name queries.
 2.  **Proactive Alerts:** Watchdog auto-detects anomalies. Alerts page shows real-time issues with acknowledge workflow. Alerts can also be created directly from chat suggestions.
-3.  **Closed-Loop Actions:** AI-generates action recommendations. Category manager approves, rejects, or reverts. Add comments for audit trail. Pending actions can be edited before approval.
+3.  **Closed-Loop Actions:** AI-generates action recommendations with **priority** (high/medium/low) and **expected impact** estimates. Category manager approves, rejects, or reverts. Add comments for audit trail. Pending actions can be edited before approval.
 4.  **Draft Actions with AI:** Enter a heading + details → LLM drafts a formal proposal with title, description, type, confidence score → review and confirm to create as pending.
-5.  **Action Center Views:** Switch between Grid, List (sortable table), and Details views. Sort by Latest Updated, Newest, Oldest, or Status. Every action shows created and updated timestamps.
+5.  **Action Center Views:** Switch between Grid, List (sortable table), and Details views. Sort by Latest Updated, Newest, Oldest, or Status. Priority badges and expected impact shown in all views.
 6.  **Report Download:** CSV export of key metrics directly from the Reports page or via chat ("Download report").
 7.  **Seller Communication:** Liaison agent drafts compliance emails and performance reports.
 8.  **Distributed Safety:** Cron scheduler uses PostgreSQL row locking to prevent duplicate job execution across multiple backend nodes.
-9.  **Chat Session Persistence:** Full conversation history is stored per session in PostgreSQL and restored when navigating session history.
-10. **Responsive Chat Panel:** Resize the chat panel via drag handle; transitions are disabled during resize for smooth performance.
+9.  **Chat Session Management:** Sessions created on panel open; last 10 active sessions in history with restore and delete. Offers to resume the previous conversation on next visit. Session end stores an episodic memory for future RAG retrieval.
+10. **Responsive Chat Panel:** Resize the chat panel via drag handle; dock left, right, or bottom. Transitions disabled during resize for smooth performance.
+11. **Response Transparency:** Every AI response shows a colour-coded confidence score (green ≥85%, yellow ≥70%, red <70%) and data source label. Failed queries show a ↻ Retry button.
+12. **Inline Data Charts:** When a data query returns tabular results (≥2 rows with a category + numeric column), an inline bar chart is rendered automatically in the chat.
+13. **Clarifying Questions:** For extremely vague queries ("sales", "show me inventory"), the AI asks for specifics — time period, category, region, metric — before attempting SQL generation.
+14. **Page-Aware Quick Actions:** Quick-start prompts on the welcome screen adapt to the current page (Dashboard / Actions / Alerts / Reports).
+15. **Persistent User Configuration:** All settings — AI thresholds, watchdog alert levels, notification preferences, UI prefs — are saved per-user in PostgreSQL via the `/config` page and restored across sessions.

@@ -91,11 +91,12 @@ graph TD
 The system relies on PostgreSQL for analytical data, agent memory, and operational logs.
 
 - **`agent_memory` / `business_context`**: Stores pgvector embeddings for RAG (Retrieval-Augmented Generation) memory recall.
-- **`action_log`**: Records actions suggested by the Planner, Recommender, or manually created (`id, title, description, action_type, category, confidence_score, status, created_at, updated_at`).
+- **`action_log`**: Records actions suggested by the Planner, Recommender, or manually created (`id, title, description, action_type, category, confidence_score, status, priority, expected_impact, created_at, updated_at`). `priority` values: `high`, `medium`, `low` (default `medium`). `expected_impact` is a human-readable revenue/risk estimate.
 - **`action_comments`**: Stores user comments attached to specific actions, enabling audit trail and collaborative review (`id, action_id, user_name, content, created_at`).
 - **`alerts`**: Stores real-time anomalies discovered by the Watchdog agent (`id, title, severity, category, message, acknowledged, created_at, updated_at`). Severity values: `critical`, `warning`, `info`.
 - **`cron_jobs`**: Distributed scheduler lock table. Each scheduled job has a row with `id, locked_by, locked_at, last_run, next_run, status`. Prevents duplicate execution across multiple backend instances.
-- **`chat_sessions` / `chat_messages`**: Stores conversation history with JSONB metadata column (used to persist follow-up suggestions).
+- **`chat_sessions` / `chat_messages`**: Stores conversation history with JSONB metadata column (used to persist follow-up suggestions). Sessions are created on panel open (not on first message); empty sessions are hidden from history.
+- **`user_preferences`**: Persists per-user configuration key-value pairs (`id, user_id, key, value, updated_at`). Used by the Config page to save/restore settings across sessions. Unique constraint on `(user_id, key)`.
 - **Fact / Dim Tables**: `fact_sales`, `fact_inventory`, `fact_competitor_prices`, `dim_products`, `dim_locations` hold the core retail data.
 
 ### 2.1 Schema: cron_jobs
@@ -125,13 +126,32 @@ CREATE TABLE action_comments (
 );
 ```
 
+### 2.3 Schema: user_preferences
+
+```sql
+CREATE TABLE IF NOT EXISTS user_preferences (
+    id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id    VARCHAR(100) NOT NULL DEFAULT 'demo_user',
+    key        VARCHAR(100) NOT NULL,
+    value      TEXT NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(user_id, key)
+);
+```
+
+Accessed via `GET /api/config/preferences` and `PUT /api/config/preferences`. The Config page reads all keys on mount and upserts on save using `ON CONFLICT (user_id, key) DO UPDATE`.
+
+**Migration safety:** Uses `CREATE TABLE IF NOT EXISTS` so re-running schema scripts on an existing DB is safe. Existing deployments should apply `infra/postgres/07-migrate.sql` which also runs `ALTER TABLE action_log ADD COLUMN IF NOT EXISTS priority / expected_impact` with safe defaults.
+
 
 ## 3. Top-Level Agent Breakdown
 
 ### 3.1 Supervisor (Orchestrator)
-The core controller located at `src/backend/internal/agent/supervisor.go`. 
+The core controller located at `src/backend/internal/agent/supervisor.go`.
 - Relies on few-shot prompting to classify user queries into Intents (`IntentSQL`, `IntentPlan`, `IntentInsight`, `IntentChat`).
 - Delegates the request and memory context to the specific worker agent.
+- **Clarification gate** (`needsClarification`): fires before LLM intent classification. If the query is an exact bare topic word or a "show me X" pattern with no specifics (e.g., `"sales"`, `"show me inventory"`), returns a structured clarification prompt immediately — no LLM call.
+- **Session end episodic memory**: when a chat session is deleted, the first user message and message count are summarised and stored in `agent_memory` as `memory_type='episodic'` via `StoreEpisodicMemory` (non-blocking goroutine).
 
 ### 3.2 Watchdog (Anomaly Detection)
 - Operates independently or triggered via the Distributed Cron Scheduler (`src/backend/internal/agent/watchdog.go`).
@@ -302,18 +322,31 @@ sequenceDiagram
 
 Chat sessions are persisted to PostgreSQL and restored when the user navigates back to the chat. Sessions are ordered by `updated_at` so recently active conversations float to the top.
 
+**Session lifecycle:**
+- A session is created immediately when the chat panel opens (before any message is sent) via `POST /api/chat/sessions`.
+- The session history sidebar shows up to the **last 10 sessions** that contain at least one message (empty sessions are filtered out by `EXISTS (SELECT 1 FROM chat_messages WHERE session_id = s.id)`).
+- Each session in the sidebar has a **🗑 delete button** that calls `DELETE /api/chat/sessions/:id` (cascades to messages).
+- Each chat SSE response includes `confidence_score` and `data_source` fields for display under the assistant message.
+- If the SSE connection fails, the message is marked with `isError: true` and a **↻ Retry** button is displayed.
+
 ```mermaid
 sequenceDiagram
     participant UI as Chat Panel
     participant API as /api/chat/*
     participant DB as chat_sessions / chat_messages
 
+    Note over UI: Panel opens (no active session)
+    UI->>API: POST /api/chat/sessions
+    API->>DB: INSERT INTO chat_sessions DEFAULT VALUES RETURNING id
+    DB-->>API: {session_id: "uuid"}
+    API-->>UI: {session_id: "uuid"}
+
     UI->>API: GET /api/chat/sessions
-    API->>DB: SELECT * FROM chat_sessions ORDER BY updated_at DESC LIMIT 20
-    DB-->>API: Session list
+    API->>DB: SELECT s.* FROM chat_sessions s WHERE EXISTS (SELECT 1 FROM chat_messages WHERE session_id=s.id) ORDER BY updated_at DESC LIMIT 10
+    DB-->>API: Session list (non-empty only)
     API-->>UI: [{id, title, updated_at}, ...]
 
-    UI->>UI: User selects session
+    UI->>UI: User selects session from history
 
     UI->>API: GET /api/chat/sessions/:id/messages
     API->>DB: SELECT role, content FROM chat_messages WHERE session_id=$1 ORDER BY created_at ASC LIMIT 10
@@ -324,9 +357,18 @@ sequenceDiagram
     API->>DB: INSERT INTO chat_messages (user message)
     API->>DB: UPDATE chat_sessions SET updated_at = NOW() WHERE id=$1
     Note over API: SSE stream begins (agent processing)
+    API-->>UI: event: response {content, agent_name, confidence_score, data_source}
     API->>DB: INSERT INTO chat_messages (assistant response)
     API->>DB: UPDATE chat_sessions SET updated_at = NOW() WHERE id=$1
     API-->>UI: event: done
+
+    alt User deletes session
+        UI->>API: DELETE /api/chat/sessions/:id
+        API->>DB: DELETE FROM chat_sessions WHERE id=$1 (CASCADE removes messages)
+        DB-->>API: OK
+        API-->>UI: 200 OK
+        UI->>UI: Remove session from sidebar; start new session
+    end
 ```
 
 ### 4.2 Report Download Flow
@@ -351,6 +393,8 @@ sequenceDiagram
 
 ### 4.3 Supervisor Orchestration Flow
 
+The Supervisor implements a six-intent routing table: `IntentQuery`, `IntentInsight`, `IntentPlan`, `IntentCommunicate`, `IntentMonitor`, `IntentGeneral`. A **clarification gate** (`needsClarification`) fires before LLM classification and short-circuits bare topic words (e.g., `"sales"`, `"inventory"`) with a structured clarification response at zero LLM cost.
+
 ```mermaid
 sequenceDiagram
     participant User
@@ -362,34 +406,37 @@ sequenceDiagram
     participant Strategist
 
     User->>ChatHandler: "Why did my sales drop 20%?"
-    ChatHandler->>DB: Save User context (Session ID)
-    ChatHandler->>Supervisor: Prompt(User Query, History)
-    
-    Supervisor->>LLM: Intent Classification Prompt
-    LLM-->>Supervisor: `STRATEGIC_ANALYSIS`
-    
-    alt is STRATEGIC_ANALYSIS
-        Supervisor->>Strategist: Delegate(Query, History)
-        Strategist->>Analyst: Request Raw Data (Sub-Delegate)
+    ChatHandler->>DB: Save user message; UPDATE chat_sessions.updated_at
+    ChatHandler->>Supervisor: Process(Input{Query, History, MemoryContext})
+
+    Note over Supervisor: needsClarification() check (no LLM)
+    Note over Supervisor: If bare vague query → return clarification prompt immediately
+
+    Supervisor->>LLM: Intent Classification (WithMaxTokens=20)
+    LLM-->>Supervisor: "insight"
+
+    alt IntentInsight (runInsightPipeline)
+        Supervisor->>Analyst: Process(Input)
+        Analyst->>LLM: Generate SQL (ReAct, max 3 retries)
+        LLM-->>Analyst: SELECT ...
+        Analyst->>DB: Execute SQL (read-only)
+        DB-->>Analyst: Rows + columns + row_count
+        Analyst-->>Supervisor: Output{Data, ConfidenceScore, DataSource}
+        Supervisor->>Strategist: Process(Input + analyst_data context)
+        Strategist->>LLM: Chain-of-Thought reasoning
+        LLM-->>Strategist: Markdown explanation
+        Strategist-->>Supervisor: Output{Response}
+    else IntentQuery
+        Supervisor->>Analyst: Process(Input)
         Analyst->>LLM: Generate SQL
-        LLM-->>Analyst: `SELECT ...`
-        Analyst->>DB: Execute SQL
-        DB-->>Analyst: Data Results
-        Analyst-->>Strategist: Extracted Metrics
-        Strategist->>LLM: Chain of Thought Reasoning (Why)
-        LLM-->>Strategist: Formatted Markdown Explanation
-        Strategist-->>Supervisor: Final Answer
-    else is DATA_FETCH
-        Supervisor->>Analyst: Delegate(Query, History)
-        Analyst->>LLM: Generate SQL
-        LLM-->>Analyst: `SELECT ...`
+        LLM-->>Analyst: SELECT ...
         Analyst->>DB: Execute SQL
         DB-->>Analyst: Data Matrix
-        Analyst-->>Supervisor: Answer Wrapper
+        Analyst-->>Supervisor: Output{Response, Data, ConfidenceScore}
     end
-    
-    Supervisor-->>ChatHandler: Final Content Stream
-    ChatHandler-->>User: Server-Sent Events (SSE) Stream
+
+    Supervisor-->>ChatHandler: Output{Response, AgentName, ConfidenceScore, DataSource}
+    ChatHandler-->>User: SSE: status → reasoning → data → response {confidence_score, data_source} → suggestions → done
 ```
 
 ### 4.4 ReAct Pattern: Analyst Agent Workflow
@@ -442,8 +489,10 @@ sequenceDiagram
 | GET | `/api/dashboard/top-products` | Top 10 products by revenue |
 | POST | `/api/dashboard/explain` | LLM explanation of a dashboard card |
 | POST | `/api/chat` | SSE streaming chat (multi-agent) |
-| GET | `/api/chat/sessions` | List chat sessions (ordered by updated_at DESC) |
+| POST | `/api/chat/sessions` | Create new chat session (called on panel open) |
+| GET | `/api/chat/sessions` | List last 10 non-empty chat sessions (ordered by updated_at DESC) |
 | GET | `/api/chat/sessions/:id/messages` | Get messages for a session (ordered ASC for context) |
+| DELETE | `/api/chat/sessions/:id` | Delete a chat session and its messages (CASCADE) |
 | GET | `/api/actions` | List actions (optional `?status=` filter) |
 | POST | `/api/actions` | Create manual action |
 | POST | `/api/actions/generate` | Auto-generate actions via Recommender |
@@ -457,6 +506,8 @@ sequenceDiagram
 | GET | `/api/alerts` | List all alerts |
 | POST | `/api/alerts/:id/acknowledge` | Acknowledge an alert |
 | **GET** | **`/api/reports/download`** | **Download CSV report (streams response)** |
+| GET | `/api/config/preferences` | Get all user preference key-value pairs |
+| PUT | `/api/config/preferences` | Save/upsert user preference key-value pairs |
 | POST | `/api/graphql` | GraphQL endpoint (chat suggestions, etc.) |
 
 ## 6. API Sequence Diagrams
@@ -599,10 +650,12 @@ graph LR
 
 The backend specifically isolates these tables into the cache to define the semantic boundary the Analyst LLM can see:
 
-1. **fact_sales:** Transactional metrics `margin, revenue, units, date_id, store_id, product_id`
-2. **dim_products:** Taxonomies `category, brand, line, sku`
-3. **dim_date:** Temporal metadata
-4. **dim_stores:** Geographic metadata `region, city, manager`
+1. **fact_sales:** Transactional metrics `margin, revenue, units, sale_date, location_id, product_id`
+2. **fact_inventory:** Stock levels `quantity_on_hand, reorder_level, days_of_supply, stock_date`
+3. **fact_competitor_prices:** Competitor pricing `competitor_name, competitor_price, price_diff_pct, price_date`
+4. **fact_forecasts:** Demand forecasts `predicted_quantity, predicted_revenue, confidence_score, forecast_date`
+5. **dim_products:** Taxonomies `category, sub_category, brand, mrp, cost_price, sku, status`
+6. **dim_locations:** Geographic metadata `city, state, region` (30 cities, 4 regions: North/South/East/West)
 
 This allows prompts to specifically block unauthorized access to other schema tables (like `users` or `system_logs`).
 
@@ -610,7 +663,8 @@ This allows prompts to specifically block unauthorized access to other schema ta
 ## 8. Subsystem: Deep Episodic Memory (PgVector)
 Rather than blindly stuffing conversational arrays back into the LLM context limits, the platform relies on **Contextual Memory Retrieval** through Semantic Indexing.
 
-- **Storage Hook**: After each successful LLM response, the assistant message is stored asynchronously in `agent_memory` (type `episodic`) with its embedding.
+- **Storage Hook (per-message)**: After each successful LLM response, the assistant message is stored asynchronously in `agent_memory` (type `episodic`) with its embedding via `supervisor.StoreEpisodicMemory()` goroutine.
+- **Storage Hook (session end)**: When a chat session is explicitly deleted (`DELETE /api/chat/sessions/:id`), the handler fetches the session's first user message and total message count, then stores a session summary record in `agent_memory` before deletion — enabling future RAG retrieval of past session topics.
 - **Embedding Generation**: `getEmbedding()` calls `llm.Embedder` (Bedrock Titan v1 in production, 1536 dims). The embedding is computed **once per query** and reused across all three parallel memory lookups.
 - **3-Tier Memory**: STM (last 10 `chat_messages`, no vector), LTM Episodic (`agent_memory`, past Q/A pairs), LTM Semantic (`business_context`, business rules and facts).
 - **Retrieval Engine**: `BuildContext()` runs three cosine-similarity queries in parallel goroutines, returning top-3 results from each tier, then injects the combined context into the agent prompt.

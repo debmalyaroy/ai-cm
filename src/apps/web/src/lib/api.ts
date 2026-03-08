@@ -149,7 +149,7 @@ export function streamChat(
 // Chat History API (REST — for session management)
 export interface ChatSession {
     id: string;
-    created_at: string;
+    updated_at: string;
     first_message: string;
 }
 
@@ -162,9 +162,13 @@ export interface ChatHistoryMessage {
 }
 
 export const chatAPI = {
+    createSession: () =>
+        fetchAPI<{ session_id: string }>('/api/chat/sessions', { method: 'POST', body: '{}' }),
     getSessions: () => fetchAPI<ChatSession[]>('/api/chat/sessions', { method: 'GET' }),
     getMessages: (sessionId: string) =>
         fetchAPI<ChatHistoryMessage[]>(`/api/chat/sessions/${sessionId}/messages`, { method: 'GET' }),
+    deleteSession: (sessionId: string) =>
+        fetchAPI<{ message: string }>(`/api/chat/sessions/${sessionId}`, { method: 'DELETE', body: '{}' }),
 };
 
 // GraphQL API (for chat operations)
@@ -192,6 +196,8 @@ export interface Action {
     created_at: string;
     updated_at: string;
     product_name: string;
+    priority: "high" | "medium" | "low";
+    expected_impact: string;
 }
 
 export interface ActionComment {
@@ -255,6 +261,16 @@ export const alertsAPI = {
     addAlert: (data: Partial<Alert>) =>
         fetchAPI<{ message: string }>('/api/alerts', {
             body: JSON.stringify(data),
+        }),
+};
+
+// User Preferences API
+export const preferencesAPI = {
+    get: () => fetchAPI<Record<string, string>>('/api/config/preferences', { method: 'GET' }),
+    save: (prefs: Record<string, string>) =>
+        fetchAPI<{ message: string }>('/api/config/preferences', {
+            method: 'PUT',
+            body: JSON.stringify(prefs),
         }),
 };
 

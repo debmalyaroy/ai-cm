@@ -38,11 +38,13 @@ type Input struct {
 
 // Output represents the result from an agent.
 type Output struct {
-	Response  string             `json:"response"`
-	Data      any                `json:"data,omitempty"`
-	AgentName string             `json:"agent_name"`
-	Reasoning []ReasoningStep    `json:"reasoning,omitempty"`
-	Actions   []ActionSuggestion `json:"actions,omitempty"`
+	Response        string             `json:"response"`
+	Data            any                `json:"data,omitempty"`
+	AgentName       string             `json:"agent_name"`
+	Reasoning       []ReasoningStep    `json:"reasoning,omitempty"`
+	Actions         []ActionSuggestion `json:"actions,omitempty"`
+	ConfidenceScore float64            `json:"confidence_score,omitempty"`
+	DataSource      string             `json:"data_source,omitempty"`
 }
 
 // Message represents a chat message.
@@ -59,8 +61,10 @@ type ReasoningStep struct {
 
 // ActionSuggestion represents a recommended action.
 type ActionSuggestion struct {
-	Title       string  `json:"title"`
-	Description string  `json:"description"`
-	ActionType  string  `json:"action_type"`
-	Confidence  float64 `json:"confidence"`
+	Title          string  `json:"title"`
+	Description    string  `json:"description"`
+	ActionType     string  `json:"action_type"`
+	Confidence     float64 `json:"confidence"`
+	Priority       string  `json:"priority,omitempty"`        // "high", "medium", "low"
+	ExpectedImpact string  `json:"expected_impact,omitempty"` // e.g. "+₹1.2L revenue / month"
 }

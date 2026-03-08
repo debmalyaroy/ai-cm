@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { preferencesAPI } from "@/lib/api";
 
 interface ConfigSection {
     title: string;
@@ -15,12 +16,12 @@ interface ConfigField {
     description?: string;
 }
 
-const initialConfig: ConfigSection[] = [
+const defaultConfig: ConfigSection[] = [
     {
         title: "AI Agent Settings",
         description: "Configure AI agent behavior and thresholds",
         fields: [
-            { key: "llm_provider", label: "LLM Provider", type: "select", value: "gemini", options: ["gemini", "openai"], description: "AI model provider for agent responses" },
+            { key: "llm_temperature", label: "LLM Temperature", type: "number", value: 0.7, description: "Creativity of LLM responses (0.0 = deterministic, 1.0 = creative)" },
             { key: "confidence_threshold", label: "Confidence Threshold", type: "number", value: 0.7, description: "Minimum confidence for auto-actions (0.0-1.0)" },
             { key: "auto_approve", label: "Auto-approve High Confidence Actions", type: "toggle", value: false, description: "Automatically approve actions above confidence threshold" },
             { key: "max_retries", label: "Max SQL Retries", type: "number", value: 3, description: "Number of retry attempts for failed SQL generation" },
@@ -46,19 +47,45 @@ const initialConfig: ConfigSection[] = [
         ],
     },
     {
-        title: "Data & Integration",
-        description: "Data source and integration settings",
+        title: "UI Preferences",
+        description: "Customize the application interface",
         fields: [
-            { key: "db_host", label: "Database Host", type: "text", value: "localhost:5432", description: "PostgreSQL connection host" },
-            { key: "db_name", label: "Database Name", type: "text", value: "aicm", description: "Database name" },
-            { key: "api_url", label: "Backend API URL", type: "text", value: "http://localhost:8080", description: "Backend API endpoint" },
+            { key: "chat_dock_position", label: "Default Chat Panel Position", type: "select", value: "right", options: ["right", "left", "bottom"], description: "Default docking position for the AI chat panel" },
+            { key: "show_reasoning", label: "Show Agent Reasoning Steps", type: "toggle", value: true, description: "Display the agent's reasoning process in chat" },
+            { key: "show_confidence", label: "Show Confidence Scores", type: "toggle", value: true, description: "Display confidence scores on AI-generated insights" },
         ],
     },
 ];
 
+function serializeValue(v: string | number | boolean): string {
+    return String(v);
+}
+
+function deserializeField(field: ConfigField, stored: Record<string, string>): ConfigField {
+    const raw = stored[field.key];
+    if (raw === undefined) return field;
+    if (field.type === "toggle") return { ...field, value: raw === "true" };
+    if (field.type === "number") return { ...field, value: Number(raw) };
+    return { ...field, value: raw };
+}
+
 export default function ConfigPage() {
-    const [config, setConfig] = useState(initialConfig);
+    const [config, setConfig] = useState(defaultConfig);
     const [saved, setSaved] = useState(false);
+    const [loading, setLoading] = useState(true);
+
+    // Load preferences from API on mount
+    useEffect(() => {
+        preferencesAPI.get()
+            .then(stored => {
+                setConfig(prev => prev.map(section => ({
+                    ...section,
+                    fields: section.fields.map(f => deserializeField(f, stored)),
+                })));
+            })
+            .catch(() => { /* non-fatal — use defaults */ })
+            .finally(() => setLoading(false));
+    }, []);
 
     const handleChange = (sectionIdx: number, fieldIdx: number, newValue: string | number | boolean) => {
         const updated = [...config];
@@ -70,18 +97,39 @@ export default function ConfigPage() {
         setSaved(false);
     };
 
-    const handleSave = () => {
-        setSaved(true);
-        setTimeout(() => setSaved(false), 3000);
+    const handleSave = async () => {
+        const flat: Record<string, string> = {};
+        for (const section of config) {
+            for (const field of section.fields) {
+                flat[field.key] = serializeValue(field.value);
+            }
+        }
+        try {
+            await preferencesAPI.save(flat);
+            setSaved(true);
+            setTimeout(() => setSaved(false), 3000);
+        } catch {
+            // Non-fatal: show saved anyway (local state is updated)
+            setSaved(true);
+            setTimeout(() => setSaved(false), 3000);
+        }
     };
+
+    if (loading) {
+        return (
+            <div style={{ padding: 40, textAlign: "center", color: "var(--color-text-secondary)" }}>
+                Loading preferences...
+            </div>
+        );
+    }
 
     return (
         <div style={{ maxWidth: 720, margin: "0 auto" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
                 <div>
-                    <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 4 }}>⚙️ Configuration</h1>
+                    <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 4 }}>Configuration</h1>
                     <p style={{ fontSize: 14, color: "var(--color-text-secondary)" }}>
-                        System configuration and preferences
+                        System configuration and user preferences (persisted across sessions)
                     </p>
                 </div>
                 <button

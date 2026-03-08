@@ -210,8 +210,9 @@ func main() {
 		handlers.RegisterDashboardRoutes(api, db, llmClient)
 		handlers.RegisterChatRoutes(api, db, llmClient, cfg.LLM.AgentModels)
 		handlers.RegisterActionRoutes(api, db, llmClient)
-		handlers.RegisterAlertRoutes(api, db) // Issue 2 Fix: Alert Routes
+		handlers.RegisterAlertRoutes(api, db)
 		handlers.RegisterReportRoutes(api, db)
+		handlers.RegisterConfigRoutes(api, db)
 		handlers.RegisterGraphQLRoutes(api, db, llmClient, cfg.LLM.AgentModels)
 	}
 

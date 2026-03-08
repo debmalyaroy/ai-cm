@@ -22,8 +22,10 @@ func RegisterChatRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, llmClient llm.Cli
 	supervisor := agent.NewSupervisorAgent(llmClient, db, agentModels)
 
 	rg.POST("/chat", handleChat(db, supervisor, llmClient))
+	rg.POST("/chat/sessions", createChatSession(db))
 	rg.GET("/chat/sessions", getChatSessions(db))
 	rg.GET("/chat/sessions/:id/messages", getChatMessages(db))
+	rg.DELETE("/chat/sessions/:id", deleteChatSession(db, supervisor))
 
 	// Admin tool: Force reloading LLM system prompts from disk
 	rg.POST("/prompts/reload", reloadPrompts())
@@ -159,10 +161,12 @@ func handleChat(db *pgxpool.Pool, supervisor *agent.SupervisorAgent, llmClient l
 			sendSSE(c.Writer, "data", output.Data)
 		}
 
-		// Send final response
-		sendSSE(c.Writer, "response", map[string]string{
-			"content":    output.Response,
-			"agent_name": output.AgentName,
+		// Send final response (with confidence score and data source for transparency)
+		sendSSE(c.Writer, "response", map[string]any{
+			"content":          output.Response,
+			"agent_name":       output.AgentName,
+			"confidence_score": output.ConfidenceScore,
+			"data_source":      output.DataSource,
 		})
 
 		// Store episodic memory in background (non-blocking)
@@ -201,6 +205,75 @@ func sendSSE(w io.Writer, event string, data any) {
 	}
 }
 
+// @Summary Create a new chat session
+// @Description Create a new chat session and return its ID
+// @Tags chat
+// @Produce json
+// @Success 200 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /chat/sessions [post]
+func createChatSession(db *pgxpool.Pool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		sessionID := uuid.New().String()
+		_, err := db.Exec(c.Request.Context(), "INSERT INTO chat_sessions (id) VALUES ($1)", sessionID)
+		if err != nil {
+			slog.ErrorContext(c.Request.Context(), "Failed to create chat session", "error", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		slog.DebugContext(c.Request.Context(), "Chat session created", "session_id", sessionID)
+		c.JSON(http.StatusOK, gin.H{"session_id": sessionID})
+	}
+}
+
+// @Summary Delete a chat session
+// @Description Delete a chat session and all its messages
+// @Tags chat
+// @Produce json
+// @Param id path string true "Session ID"
+// @Success 200 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /chat/sessions/{id} [delete]
+func deleteChatSession(db *pgxpool.Pool, supervisor *agent.SupervisorAgent) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		sessionID := c.Param("id")
+		reqCtx := c.Request.Context()
+
+		// Collect session summary before deleting — used for episodic memory
+		var firstMsg string
+		var msgCount int
+		db.QueryRow(reqCtx, `
+			SELECT
+				COALESCE((SELECT content FROM chat_messages WHERE session_id=$1 AND role='user' ORDER BY created_at ASC LIMIT 1), ''),
+				(SELECT COUNT(*) FROM chat_messages WHERE session_id=$1)
+		`, sessionID, sessionID).Scan(&firstMsg, &msgCount)
+
+		// Store episodic memory of the ended session in background (non-blocking)
+		if firstMsg != "" && msgCount > 0 {
+			go func() {
+				summary := fmt.Sprintf("Session closed after %d messages. Opening question: %s", msgCount, firstMsg)
+				if err := supervisor.StoreEpisodicMemory(context.Background(), sessionID, firstMsg, summary, "supervisor"); err != nil {
+					slog.Warn("Failed to store session end episodic memory", "error", err, "session_id", sessionID)
+				}
+			}()
+		}
+
+		// CASCADE delete removes chat_messages automatically
+		result, err := db.Exec(reqCtx, "DELETE FROM chat_sessions WHERE id = $1", sessionID)
+		if err != nil {
+			slog.ErrorContext(reqCtx, "Failed to delete chat session", "error", err, "session_id", sessionID)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if result.RowsAffected() == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+			return
+		}
+		slog.DebugContext(reqCtx, "Chat session deleted with episodic memory stored", "session_id", sessionID)
+		c.JSON(http.StatusOK, gin.H{"message": "session deleted"})
+	}
+}
+
 // @Summary Get chat sessions
 // @Description Retrieve recent chat sessions with their first message
 // @Tags chat
@@ -215,12 +288,13 @@ func getChatSessions(db *pgxpool.Pool) gin.HandlerFunc {
 		db.Exec(c, `DELETE FROM chat_sessions WHERE created_at < NOW() - INTERVAL '30 days'`)
 
 		rows, err := db.Query(c, `
-			SELECT s.id, s.created_at,
-				COALESCE((SELECT content FROM chat_messages WHERE session_id = s.id AND role = 'user' ORDER BY created_at ASC LIMIT 1), 'New Chat') as first_message
+			SELECT s.id, s.updated_at,
+				(SELECT content FROM chat_messages WHERE session_id = s.id AND role = 'user' ORDER BY created_at ASC LIMIT 1) as first_message
 			FROM chat_sessions s
 			WHERE s.created_at >= NOW() - INTERVAL '30 days'
+			  AND EXISTS (SELECT 1 FROM chat_messages WHERE session_id = s.id)
 			ORDER BY s.updated_at DESC
-			LIMIT 20
+			LIMIT 10
 		`)
 		if err != nil {
 			slog.ErrorContext(c.Request.Context(), "Failed to fetch chat sessions", "error", err)
@@ -231,18 +305,24 @@ func getChatSessions(db *pgxpool.Pool) gin.HandlerFunc {
 
 		type Session struct {
 			ID           string `json:"id"`
-			CreatedAt    string `json:"created_at"`
+			UpdatedAt    string `json:"updated_at"`
 			FirstMessage string `json:"first_message"`
 		}
 
 		var sessions []Session
 		for rows.Next() {
 			var s Session
-			var createdAt time.Time
-			if err := rows.Scan(&s.ID, &createdAt, &s.FirstMessage); err != nil {
+			var updatedAt time.Time
+			var firstMsg *string
+			if err := rows.Scan(&s.ID, &updatedAt, &firstMsg); err != nil {
 				continue
 			}
-			s.CreatedAt = createdAt.Format(time.RFC3339)
+			s.UpdatedAt = updatedAt.Format(time.RFC3339)
+			if firstMsg != nil {
+				s.FirstMessage = *firstMsg
+			} else {
+				s.FirstMessage = "New Chat"
+			}
 			sessions = append(sessions, s)
 		}
 

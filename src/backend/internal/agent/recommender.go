@@ -81,10 +81,12 @@ func (r *Recommender) checkCompetitorPrices(ctx context.Context) ([]ActionSugges
 		}
 
 		actions = append(actions, ActionSuggestion{
-			Title:       fmt.Sprintf("Price Match: %s", name),
-			Description: fmt.Sprintf("%s is selling at ₹%.0f (%.1f%% lower than MRP ₹%.0f). Recommend matching price to prevent market share loss.", competitor, compPrice, -diffPct, mrp),
-			ActionType:  "price_match",
-			Confidence:  confidence,
+			Title:          fmt.Sprintf("Price Match: %s", name),
+			Description:    fmt.Sprintf("%s is selling at ₹%.0f (%.1f%% lower than MRP ₹%.0f). Recommend matching price to prevent market share loss.", competitor, compPrice, -diffPct, mrp),
+			ActionType:     "price_match",
+			Confidence:     confidence,
+			Priority:       "high",
+			ExpectedImpact: fmt.Sprintf("Prevent ~%.0f%% market share loss in %s", -diffPct, category),
 		})
 	}
 	return actions, nil
@@ -122,10 +124,12 @@ func (r *Recommender) checkLowInventory(ctx context.Context) ([]ActionSuggestion
 		}
 
 		actions = append(actions, ActionSuggestion{
-			Title:       fmt.Sprintf("Restock Alert: %s (%s)", name, region),
-			Description: fmt.Sprintf("Current stock is %d units (reorder level: %d) in %s. Predicted stockout in %d days. Immediate reorder recommended.", qty, reorder, region, dos),
-			ActionType:  "restock",
-			Confidence:  confidence,
+			Title:          fmt.Sprintf("Restock Alert: %s (%s)", name, region),
+			Description:    fmt.Sprintf("Current stock is %d units (reorder level: %d) in %s. Predicted stockout in %d days. Immediate reorder recommended.", qty, reorder, region, dos),
+			ActionType:     "restock",
+			Confidence:     confidence,
+			Priority:       "high",
+			ExpectedImpact: fmt.Sprintf("Avoid stockout in %d days; protect %s %s revenue", dos, region, category),
 		})
 	}
 	return actions, nil
@@ -158,10 +162,12 @@ func (r *Recommender) checkHighInventory(ctx context.Context) ([]ActionSuggestio
 		}
 
 		actions = append(actions, ActionSuggestion{
-			Title:       fmt.Sprintf("Run Promotion: %s (%s)", name, region),
-			Description: fmt.Sprintf("Inventory is %d units with %d days of supply in %s. Consider running a 10-15%% discount promotion to accelerate sell-through.", qty, dos, region),
-			ActionType:  "promotion",
-			Confidence:  0.72,
+			Title:          fmt.Sprintf("Run Promotion: %s (%s)", name, region),
+			Description:    fmt.Sprintf("Inventory is %d units with %d days of supply in %s. Consider running a 10-15%% discount promotion to accelerate sell-through.", qty, dos, region),
+			ActionType:     "promotion",
+			Confidence:     0.72,
+			Priority:       "medium",
+			ExpectedImpact: fmt.Sprintf("Reduce %d-day excess inventory; improve %s sell-through rate", dos-30, category),
 		})
 	}
 	return actions, nil

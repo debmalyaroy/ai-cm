@@ -57,23 +57,30 @@ func getActions(db *pgxpool.Pool) gin.HandlerFunc {
 
 		if status != "" {
 			query = `
-				SELECT a.id, a.title, a.description, a.action_type, a.category, 
+				SELECT a.id, a.title, a.description, a.action_type, a.category,
 					a.confidence_score, a.status, a.created_at, a.updated_at,
-					COALESCE(p.name, '') as product_name
+					COALESCE(p.name, '') as product_name,
+					COALESCE(a.priority, 'medium') as priority,
+					COALESCE(a.expected_impact, '') as expected_impact
 				FROM action_log a
 				LEFT JOIN dim_products p ON a.product_id = p.id
 				WHERE a.status = $1
-				ORDER BY a.confidence_score DESC, a.created_at DESC`
+				ORDER BY
+					CASE COALESCE(a.priority,'medium') WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,
+					a.confidence_score DESC, a.created_at DESC`
 			args = []any{status}
 		} else {
 			query = `
-				SELECT a.id, a.title, a.description, a.action_type, a.category, 
+				SELECT a.id, a.title, a.description, a.action_type, a.category,
 					a.confidence_score, a.status, a.created_at, a.updated_at,
-					COALESCE(p.name, '') as product_name
+					COALESCE(p.name, '') as product_name,
+					COALESCE(a.priority, 'medium') as priority,
+					COALESCE(a.expected_impact, '') as expected_impact
 				FROM action_log a
 				LEFT JOIN dim_products p ON a.product_id = p.id
-				ORDER BY 
+				ORDER BY
 					CASE a.status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,
+					CASE COALESCE(a.priority,'medium') WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,
 					a.confidence_score DESC, a.created_at DESC`
 		}
 
@@ -97,6 +104,8 @@ func getActions(db *pgxpool.Pool) gin.HandlerFunc {
 			CreatedAt       string  `json:"created_at"`
 			UpdatedAt       string  `json:"updated_at"`
 			ProductName     string  `json:"product_name"`
+			Priority        string  `json:"priority"`
+			ExpectedImpact  string  `json:"expected_impact"`
 		}
 
 		var actions []Action
@@ -104,7 +113,8 @@ func getActions(db *pgxpool.Pool) gin.HandlerFunc {
 			var a Action
 			var createdAt, updatedAt time.Time
 			if err := rows.Scan(&a.ID, &a.Title, &a.Description, &a.ActionType, &a.Category,
-				&a.ConfidenceScore, &a.Status, &createdAt, &updatedAt, &a.ProductName); err != nil {
+				&a.ConfidenceScore, &a.Status, &createdAt, &updatedAt, &a.ProductName,
+				&a.Priority, &a.ExpectedImpact); err != nil {
 				continue
 			}
 			a.CreatedAt = createdAt.Format(time.RFC3339)
@@ -192,13 +202,24 @@ func generateActions(db *pgxpool.Pool, recommender *agent.Recommender) gin.Handl
 		// Insert generated actions (skip duplicates already pending with same title)
 		count := 0
 		for _, s := range suggestions {
+			priority := s.Priority
+			if priority == "" {
+				switch {
+				case s.Confidence >= 0.85:
+					priority = "high"
+				case s.Confidence >= 0.70:
+					priority = "medium"
+				default:
+					priority = "low"
+				}
+			}
 			result, err := db.Exec(c, `
-				INSERT INTO action_log (id, title, description, action_type, category, confidence_score, status)
-				SELECT $1, $2, $3, $4, $5, $6, 'pending'
+				INSERT INTO action_log (id, title, description, action_type, category, confidence_score, status, priority, expected_impact)
+				SELECT $1, $2, $3, $4, $5, $6, 'pending', $7, $8
 				WHERE NOT EXISTS (
 					SELECT 1 FROM action_log WHERE title = $2 AND status = 'pending'
 				)
-			`, uuid.New().String(), s.Title, s.Description, s.ActionType, "General", s.Confidence)
+			`, uuid.New().String(), s.Title, s.Description, s.ActionType, "General", s.Confidence, priority, s.ExpectedImpact)
 			if err != nil {
 				slog.WarnContext(c.Request.Context(), "Failed to insert generated action", "error", err, "title", s.Title)
 				continue

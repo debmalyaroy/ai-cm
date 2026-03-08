@@ -47,6 +47,7 @@ Before writing SQL, silently reason through:
 - Use `ROUND()` for percentages and averages.
 - Prefer filtering on indexed columns when possible (indexes are listed per table in the schema).
 - For queries involving multiple tables, always use explicit JOINs via shared keys (`product_id`, `location_id`).
+- **Name/text matching**: When filtering on text columns (`dp.name`, `dp.brand`, `dp.category`, `ds.name`, `dl.city`, `dl.region`, `dl.state`), ALWAYS use `ILIKE '%value%'` for partial matching. NEVER use exact `=` for product names or brand names — users rarely type exact names. Only use `=` for codes, IDs, and enumerated status values.
 
 # Few-Shot Examples
 

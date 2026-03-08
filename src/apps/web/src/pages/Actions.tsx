@@ -24,6 +24,25 @@ const statusBadge: Record<string, { className: string; label: string }> = {
     rejected: { className: "badge badge-danger", label: "Rejected" },
 };
 
+const priorityConfig: Record<string, { color: string; icon: string; label: string }> = {
+    high:   { color: "var(--color-danger)",  icon: "🔴", label: "High" },
+    medium: { color: "var(--color-warning)", icon: "🟡", label: "Medium" },
+    low:    { color: "var(--color-success)", icon: "🟢", label: "Low" },
+};
+
+function PriorityBadge({ priority }: { priority?: string }) {
+    const cfg = priorityConfig[priority || "medium"] || priorityConfig.medium;
+    return (
+        <span style={{
+            fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 8,
+            background: `${cfg.color}18`, color: cfg.color, border: `1px solid ${cfg.color}40`,
+            whiteSpace: "nowrap",
+        }}>
+            {cfg.icon} {cfg.label}
+        </span>
+    );
+}
+
 type ViewMode = "grid" | "list" | "details";
 type SortField = "newest" | "oldest" | "updated" | "status";
 
@@ -73,12 +92,20 @@ function ActionCard({ action, onClick, compact }: { action: Action; onClick: () 
                         )}
                     </div>
                 </div>
-                <span className={badge.className}>{badge.label}</span>
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <PriorityBadge priority={action.priority} />
+                    <span className={badge.className}>{badge.label}</span>
+                </div>
             </div>
             {!compact && (
                 <p style={{ fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 1.6, margin: "0 0 10px" }}>
                     {action.description}
                 </p>
+            )}
+            {!compact && action.expected_impact && (
+                <div style={{ fontSize: 12, color: "var(--color-success)", background: "rgba(34,197,94,0.08)", borderRadius: 6, padding: "4px 10px", marginBottom: 10 }}>
+                    Impact: {action.expected_impact}
+                </div>
             )}
             <div>
                 <div style={{ fontSize: 11, color: "var(--color-text-secondary)", marginBottom: 4 }}>Confidence</div>
@@ -114,6 +141,7 @@ function ActionListRow({
                 <th style={headerColStyle}></th>
                 <th style={headerColStyle} onClick={() => onSortChange?.("newest")}>Title{sortIndicator("newest")}</th>
                 <th style={headerColStyle}>Type</th>
+                <th style={headerColStyle}>Priority</th>
                 <th style={headerColStyle} onClick={() => onSortChange?.("status")}>Status{sortIndicator("status")}</th>
                 <th style={headerColStyle}>Confidence</th>
                 <th style={{ ...headerColStyle }} onClick={() => onSortChange?.("newest")}>Created{sortIndicator("newest")}</th>
@@ -133,6 +161,7 @@ function ActionListRow({
             <td style={colStyle}>{actionTypeIcons[action.action_type] || "⚡"}</td>
             <td style={{ ...colStyle, fontWeight: 500 }}>{action.title}</td>
             <td style={colStyle}><span style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>{action.action_type.replace(/_/g, " ").toUpperCase()}</span></td>
+            <td style={colStyle}><PriorityBadge priority={action.priority} /></td>
             <td style={colStyle}><span className={badge!.className}>{badge!.label}</span></td>
             <td style={{ ...colStyle, minWidth: 120 }}><ConfidenceMeter score={action.confidence_score} /></td>
             <td style={{ ...colStyle, color: "var(--color-text-secondary)", fontSize: 12, whiteSpace: "nowrap" }}>{new Date(action.created_at).toLocaleString()}</td>
@@ -221,9 +250,10 @@ function ActionDetailsModal({
                     <button className="btn btn-ghost" onClick={onClose} style={{ padding: "4px 8px" }}>✕</button>
                 </div>
 
-                {/* Timestamps + Status */}
+                {/* Timestamps + Status + Priority */}
                 <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
                     <span className={badge.className}>{badge.label}</span>
+                    <PriorityBadge priority={action.priority} />
                     <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
                         Created: {new Date(action.created_at).toLocaleString()}
                     </span>
@@ -233,6 +263,14 @@ function ActionDetailsModal({
                         </span>
                     )}
                 </div>
+
+                {/* Expected Impact */}
+                {action.expected_impact && (
+                    <div style={{ background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)", borderRadius: 8, padding: "10px 14px" }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--color-success)", marginBottom: 2 }}>Expected Impact</div>
+                        <div style={{ fontSize: 13 }}>{action.expected_impact}</div>
+                    </div>
+                )}
 
                 {/* Description */}
                 <div>

@@ -99,6 +99,22 @@ func (s *SupervisorAgent) Process(ctx context.Context, input *Input) (*Output, e
 		}
 	}
 
+	// Step 0.5: If the query is too vague, ask for clarification instead of burning an LLM call
+	if needsClarification(input.Query) {
+		slog.InfoContext(ctx, "Supervisor: query too vague, returning clarification prompt", "query", input.Query)
+		return &Output{
+			AgentName: s.Name(),
+			Reasoning: []ReasoningStep{{Type: "thought", Content: "Query is too vague to route — asking for clarification"}},
+			Response: "I'd love to help! Could you be a bit more specific?\n\n" +
+				"For example:\n" +
+				"- **Time period**: \"this month\", \"last quarter\", \"last 30 days\"\n" +
+				"- **Category or product**: \"Diapers\", \"Pampers Active Baby\", \"Baby Formula\"\n" +
+				"- **Region**: \"East India\", \"South India\", \"West India\"\n" +
+				"- **Metric**: revenue, units sold, margin %, inventory levels\n\n" +
+				"Try: *\"Show me diaper sales this month\"* or *\"Top 10 products by revenue in Q4\"*",
+		}, nil
+	}
+
 	// Step 1: Classify the intent
 	intent := s.classifyIntent(ctx, input.Query)
 	slog.InfoContext(ctx, "Supervisor: classified intent", "intent", intent, "query", input.Query, "session_id", input.SessionID)
@@ -359,9 +375,12 @@ func (s *SupervisorAgent) classifyWithHeuristics(_ context.Context, query string
 	}
 
 	// Planning/Action patterns — checked before monitor so "create alert" routes to plan, not monitor
+	// NOTE: "recommend" alone is intentionally excluded — "what are your recommendations?" is insight, not plan.
+	// Only explicit action-creation or implementation directives belong here.
 	planPatterns := []string{
-		// Recommendation / planning
-		"plan", "propose", "what should", "recommend", "do about", "next step", "prioriti",
+		// Recommendation / planning (only explicit action forms)
+		"plan", "propose", "what should", "do about", "next step", "prioriti",
+		"recommend a plan", "recommend implementing", "recommend that we", "recommend action",
 		// Directive action-creation verbs (retail operations)
 		"create a ", "create an ", "create the ",  // "create a replenishment order", "create a promotion"
 		"create action", "create an action", "create alert",
@@ -389,7 +408,7 @@ func (s *SupervisorAgent) classifyWithHeuristics(_ context.Context, query string
 		}
 	}
 
-	// Insight patterns — analytical reasoning, comparisons, forecasts, explanations
+	// Insight patterns — analytical reasoning, comparisons, forecasts, explanations, recommendations
 	insightPatterns := []string{
 		"why", "explain", "analyze", "analyse", "analysis", "reason", "root cause",
 		"insight", "how come", "what happened", "trend", "forecast", "predict",
@@ -397,6 +416,12 @@ func (s *SupervisorAgent) classifyWithHeuristics(_ context.Context, query string
 		"performance", "evaluate", "assessment", "diagnose",
 		"adjust the forecast", "based on",
 		"profit margin", "margin analysis", "revenue analysis",
+		// Recommendation queries that need data analysis (not action creation)
+		"recommend", "recommendations", "what do you recommend", "your top",
+		"for me this week", "for me this month",
+		// Underperformance / gap analysis
+		"underperform", "below target", "below reorder", "below average",
+		"what are your", "top insight",
 	}
 	for _, p := range insightPatterns {
 		if strings.Contains(lower, p) {
@@ -422,6 +447,44 @@ func isMonitoringQuery(query string) bool {
 			return true
 		}
 	}
+	return false
+}
+
+// needsClarification returns true when the query is so short and generic that routing to
+// any agent would produce a poor result. Only the most unambiguous cases trigger this —
+// the list is intentionally conservative to avoid blocking legitimate short queries.
+func needsClarification(query string) bool {
+	lower := strings.ToLower(strings.TrimRight(strings.TrimSpace(query), "?!., "))
+
+	// Only check very short queries — anything with reasonable context is fine
+	if len(lower) > 20 {
+		return false
+	}
+
+	// Exact vague terms that have no actionable scope on their own
+	vagueSingleTerms := []string{
+		"sales", "inventory", "revenue", "margin", "products", "stock",
+		"performance", "metrics", "data", "orders", "margins",
+	}
+	for _, t := range vagueSingleTerms {
+		if lower == t {
+			return true
+		}
+	}
+
+	// Simple "show me / get / list X" patterns with only a bare topic word
+	prefixes := []string{"show me ", "show ", "get ", "list ", "display "}
+	for _, pfx := range prefixes {
+		if strings.HasPrefix(lower, pfx) {
+			rest := strings.TrimPrefix(lower, pfx)
+			for _, t := range vagueSingleTerms {
+				if rest == t {
+					return true
+				}
+			}
+		}
+	}
+
 	return false
 }
 
