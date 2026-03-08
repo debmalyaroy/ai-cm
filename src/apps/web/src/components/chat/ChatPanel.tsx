@@ -221,7 +221,7 @@ export default function ChatPanel() {
                         break;
                     case "data": {
                         // Store SQL result payload for chart rendering
-                        const payload = event.data as SQLResultPayload;
+                        const payload = event.data as unknown as SQLResultPayload;
                         if (payload && Array.isArray(payload.rows) && payload.rows.length > 1) {
                             setMessages((prev) =>
                                 prev.map((m) => m.id === assistantId ? { ...m, chartData: payload } : m)

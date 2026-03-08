@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import {
     dashboardAPI,
     actionsAPI,
@@ -8,6 +9,12 @@ import {
     type RegionData,
     type TopProduct,
 } from "@/lib/api";
+
+const FALLBACK_ACTIONS = [
+    "Review pricing strategy for underperforming SKUs",
+    "Analyze inventory levels and reorder points",
+    "Evaluate competitor positioning and market trends",
+];
 
 function formatCurrency(val: number): string {
     if (val >= 10000000) return `₹${(val / 10000000).toFixed(1)}Cr`;
@@ -86,8 +93,7 @@ function BarWithTooltip({
     );
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function CardOptionsButton({ cardType, variant = "menu" }: { cardType: string; cardData?: any; variant?: "menu" | "inline" }) {
+function CardOptionsButton({ cardType, cardData, variant = "menu" }: { cardType: string; cardData?: unknown; variant?: "menu" | "inline" }) {
     const [showMenu, setShowMenu] = useState(false);
     const [showActions, setShowActions] = useState(false);
     const [actions, setActions] = useState<string[]>([]);
@@ -114,55 +120,12 @@ function CardOptionsButton({ cardType, variant = "menu" }: { cardType: string; c
         setShowMenu(false);
         setShowActions(true);
         setLoadingActions(true);
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 45000);
         try {
-            const query = `Fetch the recent performance data for my "${cardType}" metrics. Based on the data returned by the query, provide 3 to 5 recommended actions I should take to improve performance. Format as a numbered list.`;
-            const res = await fetch("/api/chat", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ message: query }),
-                signal: controller.signal,
-            });
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-            const reader = res.body?.getReader();
-            const decoder = new TextDecoder();
-            let buffer = "";
-            const actionItems: string[] = [];
-            let currentEvent = "";
-
-            if (reader) {
-                outer: while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-                    buffer += decoder.decode(value, { stream: true });
-                    const lines = buffer.split("\n");
-                    buffer = lines.pop() || "";
-                    for (const line of lines) {
-                        if (line.startsWith("event: ")) {
-                            currentEvent = line.slice(7).trim();
-                        } else if (line.startsWith("data: ")) {
-                            try {
-                                const data = JSON.parse(line.slice(6));
-                                if (currentEvent === "response" && data.content) {
-                                    data.content.split(/\n/).forEach((l: string) => {
-                                        const m = l.match(/^\d+\.\s+(.+)/);
-                                        if (m) actionItems.push(m[1].replace(/\*\*/g, "").trim());
-                                    });
-                                }
-                                if (currentEvent === "done") break outer;
-                            } catch { /* ignore parse errors */ }
-                        }
-                    }
-                }
-            }
-
-            setActions(actionItems.length > 0 ? actionItems.slice(0, 5) : ["Review pricing strategy", "Check inventory levels", "Analyze competitor activity"]);
+            const { actions: suggested } = await dashboardAPI.getCardActions(cardType, cardData);
+            setActions(suggested.length > 0 ? suggested.slice(0, 3) : FALLBACK_ACTIONS);
         } catch {
-            setActions(["Review pricing strategy", "Check inventory levels", "Analyze competitor activity"]);
+            setActions(FALLBACK_ACTIONS);
         } finally {
-            clearTimeout(timeoutId);
             setLoadingActions(false);
         }
     };
@@ -182,6 +145,36 @@ function CardOptionsButton({ cardType, variant = "menu" }: { cardType: string; c
         }
         window.dispatchEvent(new CustomEvent("aicm-chat", { detail: { message: `Execute: ${action} for ${cardType}` } }));
     };
+
+    const modal = showActions ? (
+        <div className="modal-backdrop" onClick={() => setShowActions(false)}>
+            <div className="modal-content modal-actions" onClick={(e) => e.stopPropagation()}>
+                <div className="modal-actions-header">
+                    <h3 className="modal-actions-title">⚡ Recommended Actions — {cardType}</h3>
+                    <button className="modal-close" onClick={() => setShowActions(false)}>✕</button>
+                </div>
+                {loadingActions ? (
+                    <div className="modal-actions-loading">
+                        <div className="chat-status-dot" />
+                        Analyzing...
+                    </div>
+                ) : (
+                    <div className="modal-actions-list">
+                        {actions.map((a, i) => (
+                            <button
+                                key={i}
+                                className="action-modal-btn"
+                                onClick={() => executeAction(a)}
+                            >
+                                <span className="action-modal-icon">▶</span>
+                                <span className="action-modal-text">{a}</span>
+                            </button>
+                        ))}
+                    </div>
+                )}
+            </div>
+        </div>
+    ) : null;
 
     return (
         <>
@@ -209,37 +202,7 @@ function CardOptionsButton({ cardType, variant = "menu" }: { cardType: string; c
                     )}
                 </div>
             )}
-
-            {/* Actions Modal */}
-            {showActions && (
-                <div className="modal-backdrop" onClick={() => setShowActions(false)}>
-                    <div className="modal-content modal-actions" onClick={(e) => e.stopPropagation()}>
-                        <div className="modal-actions-header">
-                            <h3 className="modal-actions-title">⚡ Recommended Actions — {cardType}</h3>
-                            <button className="modal-close" onClick={() => setShowActions(false)}>✕</button>
-                        </div>
-                        {loadingActions ? (
-                            <div className="modal-actions-loading">
-                                <div className="chat-status-dot" />
-                                Analyzing...
-                            </div>
-                        ) : (
-                            <div className="modal-actions-list">
-                                {actions.map((a, i) => (
-                                    <button
-                                        key={i}
-                                        className="action-modal-btn"
-                                        onClick={() => executeAction(a)}
-                                    >
-                                        <span className="action-modal-icon">▶</span>
-                                        <span className="action-modal-text">{a}</span>
-                                    </button>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                </div>
-            )}
+            {modal && createPortal(modal, document.body)}
         </>
     );
 }

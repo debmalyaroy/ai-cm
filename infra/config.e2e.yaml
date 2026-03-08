@@ -1,0 +1,40 @@
+# AI-CM Backend Configuration - E2E Tests (Mock LLM)
+# Used by docker-compose.e2e.yml. Points the backend at the mock LLM container
+# instead of a real Ollama instance. All other settings mirror config.local.llm.yaml.
+
+server:
+  port: 8080
+  read_timeout_sec: 30
+  write_timeout_sec: 300
+  shutdown_sec: 5
+
+database:
+  url: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-aicm}?sslmode=disable"
+  max_conns: 10
+  min_conns: 2
+  max_conn_life_sec: 3600
+
+llm:
+  provider: "local"
+  temperature: 0.0
+  local_url: "http://llm-mock:11434/api/generate"
+  local_model: "llama3.2"
+
+  agent_models:
+    supervisor: "llama3.2"
+    analyst: "llama3.2"
+    strategist: "llama3.2"
+    planner: "llama3.2"
+    liaison: "llama3.2"
+    watchdog: "llama3.2"
+
+logging:
+  level: "info"
+  format: "text"
+
+security:
+  rate_limit_enabled: false
+
+cors:
+  allow_origins:
+    - "*"

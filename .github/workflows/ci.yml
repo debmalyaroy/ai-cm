@@ -9,8 +9,40 @@ env:
   DOCKER_REGISTRY: ${{ secrets.DOCKER_USERNAME }}
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache-dependency-path: src/backend/go.sum
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: ./src/apps/web/package-lock.json
+
+      - name: Run backend unit tests
+        working-directory: ./src/backend
+        run: go test -v -coverprofile=coverage.out -covermode=atomic -skip 'E2E|e2e|EndToEnd' ./... -count=1 -timeout 120s
+
+      - name: Install frontend dependencies
+        working-directory: ./src/apps/web
+        run: npm ci
+
+      - name: Run frontend tests
+        working-directory: ./src/apps/web
+        run: npm test
+
   build-and-push:
     runs-on: ubuntu-latest
+    needs: [test]
 
     steps:
       - uses: actions/checkout@v4

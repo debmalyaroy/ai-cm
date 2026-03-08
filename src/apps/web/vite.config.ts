@@ -12,9 +12,8 @@ export default defineConfig({
   },
   server: {
     port: 3000,
-    strictPort: true, // Fail if 3000 is occupied
+    strictPort: true,
     proxy: {
-      // Mirror the nginx /api/ proxy so local dev behaves identically to production
       '/api': { target: 'http://localhost:8080', changeOrigin: true },
     },
   },

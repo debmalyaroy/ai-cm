@@ -5,11 +5,22 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"regexp"
+	"strings"
 
 	"github.com/debmalyaroy/ai-cm/internal/llm"
 	"github.com/debmalyaroy/ai-cm/internal/prompts"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+var (
+	numberedItemRe     = regexp.MustCompile(`^\d+\.\s+(.+)`)
+	defaultCardActions = []string{
+		"Review pricing strategy for underperforming SKUs",
+		"Analyze inventory levels and reorder points",
+		"Evaluate competitor positioning and market trends",
+	}
 )
 
 // RegisterDashboardRoutes registers all dashboard API routes.
@@ -22,6 +33,7 @@ func RegisterDashboardRoutes(rg *gin.RouterGroup, db *pgxpool.Pool, llmClient ll
 		dash.POST("/regional-performance", getRegionalPerformance(db))
 		dash.POST("/top-products", getTopProducts(db))
 		dash.POST("/explain", explainCard(llmClient))
+		dash.POST("/card-actions", cardActions(llmClient))
 	}
 }
 
@@ -287,6 +299,59 @@ func getTopProducts(db *pgxpool.Pool) gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusOK, data)
+	}
+}
+
+// cardActions uses the LLM to generate exactly 3 recommended actions for a dashboard card.
+func cardActions(llmClient llm.Client) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req struct {
+			CardType string `json:"card_type" binding:"required"`
+			CardData any    `json:"card_data"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "card_type is required"})
+			return
+		}
+
+		cardJSON := "N/A"
+		if req.CardData != nil {
+			if b, err := json.MarshalIndent(req.CardData, "", "  "); err == nil {
+				cardJSON = string(b)
+			}
+		}
+
+		systemPrompt := prompts.Get("card_actions.md")
+		userPrompt := fmt.Sprintf("Dashboard Card: %s\n\nData:\n%s", req.CardType, cardJSON)
+
+		slog.InfoContext(c.Request.Context(), "generating card actions", "card_type", req.CardType)
+
+		response, err := llmClient.Generate(c.Request.Context(), systemPrompt, userPrompt)
+		if err != nil {
+			slog.ErrorContext(c.Request.Context(), "LLM card actions failed",
+				"card_type", req.CardType, "error", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate actions"})
+			return
+		}
+
+		var actions []string
+		for _, line := range strings.Split(response, "\n") {
+			line = strings.TrimSpace(line)
+			if m := numberedItemRe.FindStringSubmatch(line); m != nil {
+				action := strings.TrimSpace(strings.ReplaceAll(m[1], "**", ""))
+				if action != "" {
+					actions = append(actions, action)
+				}
+			}
+		}
+
+		// Pad with defaults if LLM returned fewer than 3 items, cap at 3.
+		for len(actions) < 3 {
+			actions = append(actions, defaultCardActions[len(actions)])
+		}
+		actions = actions[:3]
+
+		c.JSON(http.StatusOK, gin.H{"actions": actions})
 	}
 }
 

@@ -332,42 +332,42 @@ Chat sessions are persisted to PostgreSQL and restored when the user navigates b
 ```mermaid
 sequenceDiagram
     participant UI as Chat Panel
-    participant API as /api/chat/*
-    participant DB as chat_sessions / chat_messages
+    participant API as "/api/chat/*"
+    participant DB as "chat_sessions / chat_messages"
 
     Note over UI: Panel opens (no active session)
     UI->>API: POST /api/chat/sessions
-    API->>DB: INSERT INTO chat_sessions DEFAULT VALUES RETURNING id
+    API->>DB: INSERT INTO chat_sessions
     DB-->>API: {session_id: "uuid"}
     API-->>UI: {session_id: "uuid"}
 
     UI->>API: GET /api/chat/sessions
-    API->>DB: SELECT s.* FROM chat_sessions s WHERE EXISTS (SELECT 1 FROM chat_messages WHERE session_id=s.id) ORDER BY updated_at DESC LIMIT 10
+    API->>DB: SELECT s.* FROM sessions
     DB-->>API: Session list (non-empty only)
     API-->>UI: [{id, title, updated_at}, ...]
 
-    UI->>UI: User selects session from history
+    UI->>UI: User selects session
 
     UI->>API: GET /api/chat/sessions/:id/messages
-    API->>DB: SELECT role, content FROM chat_messages WHERE session_id=$1 ORDER BY created_at ASC LIMIT 10
-    DB-->>API: Message history (ASC for correct conversation order)
+    API->>DB: SELECT role, content FROM messages
+    DB-->>API: Message history
     API-->>UI: [{role, content}, ...]
 
     UI->>API: POST /api/chat {message, session_id}
-    API->>DB: INSERT INTO chat_messages (user message)
-    API->>DB: UPDATE chat_sessions SET updated_at = NOW() WHERE id=$1
-    Note over API: SSE stream begins (agent processing)
-    API-->>UI: event: response {content, agent_name, confidence_score, data_source}
-    API->>DB: INSERT INTO chat_messages (assistant response)
-    API->>DB: UPDATE chat_sessions SET updated_at = NOW() WHERE id=$1
+    API->>DB: INSERT user message
+    API->>DB: UPDATE session timestamp
+    Note over API: SSE stream begins
+    API-->>UI: event: response {content, score}
+    API->>DB: INSERT assistant response
+    API->>DB: UPDATE session timestamp
     API-->>UI: event: done
 
     alt User deletes session
         UI->>API: DELETE /api/chat/sessions/:id
-        API->>DB: DELETE FROM chat_sessions WHERE id=$1 (CASCADE removes messages)
+        API->>DB: DELETE session (CASCADE)
         DB-->>API: OK
         API-->>UI: 200 OK
-        UI->>UI: Remove session from sidebar; start new session
+        UI->>UI: Remove from sidebar
     end
 ```
 
@@ -399,44 +399,44 @@ The Supervisor implements a six-intent routing table: `IntentQuery`, `IntentInsi
 sequenceDiagram
     participant User
     participant ChatHandler
-    participant DB as Postgres (Session)
+    participant DB as Postgres
     participant Supervisor
     participant LLM as LLM Provider
     participant Analyst
     participant Strategist
 
     User->>ChatHandler: "Why did my sales drop 20%?"
-    ChatHandler->>DB: Save user message; UPDATE chat_sessions.updated_at
-    ChatHandler->>Supervisor: Process(Input{Query, History, MemoryContext})
+    ChatHandler->>DB: Save user message
+    ChatHandler->>Supervisor: Process Input
 
-    Note over Supervisor: needsClarification() check (no LLM)
-    Note over Supervisor: If bare vague query → return clarification prompt immediately
+    Note over Supervisor: Check for clarification
+    Note over Supervisor: Vague query? Return prompt
 
-    Supervisor->>LLM: Intent Classification (WithMaxTokens=20)
+    Supervisor->>LLM: Intent Classification
     LLM-->>Supervisor: "insight"
 
-    alt IntentInsight (runInsightPipeline)
-        Supervisor->>Analyst: Process(Input)
-        Analyst->>LLM: Generate SQL (ReAct, max 3 retries)
+    alt Intent: Insight
+        Supervisor->>Analyst: Process Input
+        Analyst->>LLM: Generate SQL
         LLM-->>Analyst: SELECT ...
-        Analyst->>DB: Execute SQL (read-only)
-        DB-->>Analyst: Rows + columns + row_count
-        Analyst-->>Supervisor: Output{Data, ConfidenceScore, DataSource}
-        Supervisor->>Strategist: Process(Input + analyst_data context)
-        Strategist->>LLM: Chain-of-Thought reasoning
+        Analyst->>DB: Execute SQL
+        DB-->>Analyst: Rows + Columns
+        Analyst-->>Supervisor: Output Data
+        Supervisor->>Strategist: Process with Context
+        Strategist->>LLM: CoT Reasoning
         LLM-->>Strategist: Markdown explanation
-        Strategist-->>Supervisor: Output{Response}
-    else IntentQuery
-        Supervisor->>Analyst: Process(Input)
+        Strategist-->>Supervisor: Output Response
+    else Intent: Query
+        Supervisor->>Analyst: Process Input
         Analyst->>LLM: Generate SQL
         LLM-->>Analyst: SELECT ...
         Analyst->>DB: Execute SQL
         DB-->>Analyst: Data Matrix
-        Analyst-->>Supervisor: Output{Response, Data, ConfidenceScore}
+        Analyst-->>Supervisor: Output Data
     end
 
-    Supervisor-->>ChatHandler: Output{Response, AgentName, ConfidenceScore, DataSource}
-    ChatHandler-->>User: SSE: status → reasoning → data → response {confidence_score, data_source} → suggestions → done
+    Supervisor-->>ChatHandler: Final Output
+    ChatHandler-->>User: SSE Stream (Reasoning to Done)
 ```
 
 ### 4.4 ReAct Pattern: Analyst Agent Workflow
@@ -800,21 +800,21 @@ Four security groups control network access:
 sequenceDiagram
     participant Dev as Developer (Windows)
     participant GH as GitHub
-    participant CI as GitHub Actions CI
+    participant CI as GitHub Actions
     participant DH as DockerHub
     participant EC2 as EC2 (SSH via PuTTY)
 
     Dev->>GH: git push origin master
-    GH->>CI: Trigger CI workflow (ubuntu-latest)
-    CI->>CI: go test ./internal/... (unit tests)
-    CI->>CI: golangci-lint
+    GH->>CI: Trigger Workflow
+    CI->>CI: Run unit tests
+    CI->>CI: Run golangci-lint
     CI->>CI: build.sh all -t prod
-    Note over CI: docker buildx linux/amd64+arm64
-    CI->>DH: Push aicm-backend:latest (multi-arch)
-    CI->>DH: Push aicm-frontend:latest (multi-arch)
+    Note over CI: docker buildx multi-arch
+    CI->>DH: Push Backend Image
+    CI->>DH: Push Frontend Image
 
-    Dev->>EC2: SSH via PuTTY (key: aicm-server.ppk)
-    EC2->>DH: docker compose pull (arm64 variant auto-selected)
-    EC2->>EC2: docker compose -f docker-compose.prod.yml up -d
-    EC2-->>Dev: Containers running; verify via Dozzle :4567
+    Dev->>EC2: SSH via PuTTY
+    EC2->>DH: docker compose pull
+    EC2->>EC2: docker compose up -d
+    EC2-->>Dev: Verify via Dozzle
 ```

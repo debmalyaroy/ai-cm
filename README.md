@@ -2,7 +2,8 @@
 
 [![CI (Master)](https://github.com/debmalyaroy/ai-cm/actions/workflows/ci.yml/badge.svg)](https://github.com/debmalyaroy/ai-cm/actions/workflows/ci.yml)
 [![PR Review](https://github.com/debmalyaroy/ai-cm/actions/workflows/pr_review.yml/badge.svg)](https://github.com/debmalyaroy/ai-cm/actions/workflows/pr_review.yml)
-![Coverage](https://img.shields.io/badge/Coverage-80%25%2B-brightgreen.svg)
+[![E2E Tests](https://github.com/debmalyaroy/ai-cm/actions/workflows/e2e.yml/badge.svg)](https://github.com/debmalyaroy/ai-cm/actions/workflows/e2e.yml)
+![Coverage](https://img.shields.io/badge/Coverage-90%25%2B-brightgreen.svg)
 
 > **Transforming Retail Category Management from Reactive Analysis to Proactive Decision Intelligence.**
 
@@ -59,26 +60,89 @@ cp .env.example .env
 | PostgreSQL | localhost:5432 | pgvector DB (~157K+ rows seeded) |
 | Ollama (if local_llm) | localhost:11434 | Local LLM Engine |
 
-**Run backend unit tests:**
+**Run unit tests (backend + frontend, no external services needed):**
 ```bash
 # Linux/Mac
-cd src/backend && go test ./internal/... -count=1
+./scripts/test_unit.sh
 
 # Windows
-.scriptsuild.ps1 backend
+.\scripts\test_unit.ps1
 ```
 
-**Run E2E tests (local only):**
-Ensure the `local_llm` stack is running, then:
+**Run E2E tests (uses Mock LLM — no GPU required):**
 ```bash
-# Windows
-.\scripts\test_e2e.ps1
-
 # Linux/Mac
 ./scripts/test_e2e.sh
+
+# Windows
+.\scripts\test_e2e.ps1
 ```
 
-> ⚠️ **E2E tests are NOT run in CI** because they require a live PostgreSQL instance and a local Ollama LLM server. Run them manually via the `test_e2e` scripts.
+The E2E scripts automatically start Postgres and the mock LLM server via Docker, then run `go test ./tests/...` against the live services. No Ollama installation needed.
+
+---
+
+## 🧪 Testing
+
+AI-CM has three levels of testing that progressively increase in scope and infrastructure requirements.
+
+### 1. Unit Tests (no external services)
+
+Backend unit tests cover all `internal/` packages and skip E2E-tagged tests. Frontend tests run with Vitest.
+
+```bash
+# Runs backend Go tests + frontend Vitest (Linux/Mac)
+./scripts/test_unit.sh
+
+# Windows PowerShell equivalent
+.\scripts\test_unit.ps1
+```
+
+Coverage requirement: **90%+** on backend packages (enforced in CI on pull requests).
+
+### 2. E2E Tests (Docker + Mock LLM)
+
+E2E tests exercise the full agent pipeline — intent classification, SQL generation, SSE streaming, action generation — without requiring a real LLM. A lightweight mock server (`infra/llm-mock/`) listens on port 11434 and returns canned, structurally-valid responses for each agent prompt type.
+
+```bash
+# Linux/Mac — builds mock LLM container + starts Postgres, then runs go test ./tests/...
+./scripts/test_e2e.sh
+
+# Windows PowerShell
+.\scripts\test_e2e.ps1
+```
+
+The mock LLM classifies prompts by keyword matching:
+
+| Agent | Keyword trigger | Mock response |
+|-------|----------------|---------------|
+| Supervisor (intent) | "reply with only one word" | `query` / `insight` / `plan` (keyword-driven) |
+| Analyst (SQL) | "sqlforge" / "read-only" | Valid `SELECT` SQL block |
+| Strategist | "chain-of-thought" / "analyse" | Business insight paragraph |
+| Planner | "actionforge" / "propose actions" | `ACTION:` formatted blocks |
+| Liaison | "draft" + "email"/"report" | Professional email body |
+
+To run E2E tests in an isolated Docker stack (no local services needed):
+```bash
+# Start only the services, then test from host
+cd infra
+docker compose -f docker-compose.e2e.yml up -d postgres llm-mock
+
+cd ../src/backend
+DATABASE_URL="postgres://aicm:aicm_secret@localhost:5432/aicm?sslmode=disable" \
+LLM_PROVIDER=local OLLAMA_BASE_URL=http://localhost:11434 \
+go test ./tests/... -v -count=1 -timeout 180s
+```
+
+### 3. CI / CD Pipeline
+
+| Workflow | Trigger | What runs |
+|----------|---------|-----------|
+| **PR Review** (`.github/workflows/pr_review.yml`) | Pull Request to `master` | Go lint + unit tests (90% coverage gate) + frontend lint/test/build |
+| **CI** (`.github/workflows/ci.yml`) | Push to `master` | Unit tests → Swagger gen → lint → Docker multi-arch build & push to DockerHub |
+| **E2E** (`.github/workflows/e2e.yml`) | Push to `master` | Postgres service + mock LLM binary + `go test ./tests/...` |
+
+The E2E workflow runs the mock LLM directly (`go run infra/llm-mock/main.go`) alongside a Postgres service container — no Docker-in-Docker required.
 
 ---
 

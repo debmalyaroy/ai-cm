@@ -63,8 +63,9 @@ function Build-Backend {
     Push-Location (Join-Path $RootDir "src\backend")
     try {
         Write-Info "Running unit tests (internal packages)..."
-        # go test ./internal/... -count=1
-        # if ($LASTEXITCODE -ne 0) { Write-Err "Backend unit tests failed"; exit 1 }
+        $env:GOOS = ""; $env:GOARCH = ""; $env:CGO_ENABLED = ""
+        go test ./internal/... -count=1
+        if ($LASTEXITCODE -ne 0) { Write-Err "Backend unit tests failed"; exit 1 }
 
         $binDir = Join-Path $RootDir "bin"
         if (-not (Test-Path $binDir)) { New-Item -ItemType Directory -Path $binDir | Out-Null }
@@ -97,6 +98,10 @@ function Build-Frontend {
             npm install
             if ($LASTEXITCODE -ne 0) { Write-Err "npm install failed"; exit 1 }
         }
+
+        Write-Info "Running frontend tests..."
+        npm test
+        if ($LASTEXITCODE -ne 0) { Write-Err "Frontend tests failed"; exit 1 }
 
         Write-Info "Building Vite/React app..."
         npm run build

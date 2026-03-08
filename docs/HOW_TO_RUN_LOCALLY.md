@@ -204,11 +204,59 @@ If you see `bedrock invoke failed: no credentials`, verify that `AWS_ACCESS_KEY_
 
 ## Testing & Building
 
-### Running E2E Tests
-Make sure Postgres and Ollama are running via `run.ps1 -Profile local_llm`, then:
+### Running Unit Tests (No External Services Required)
+
+Unit tests cover all `internal/` packages and the frontend components. No database or LLM server is needed.
 
 ```powershell
+# Windows
+.\scripts\test_unit.ps1
+
+# Linux/Mac
+./scripts/test_unit.sh
+```
+
+This script:
+1. Runs `go test -skip 'E2E|e2e|EndToEnd' ./...` on the backend with coverage reporting.
+2. Runs `npm test` on the frontend.
+
+Coverage threshold: **90%+** on backend packages.
+
+---
+
+### Running E2E Tests (Mock LLM — No GPU Required)
+
+E2E tests exercise the full agent pipeline against a real Postgres database and a lightweight mock LLM server. No Ollama installation or GPU is needed.
+
+```powershell
+# Windows
 .\scripts\test_e2e.ps1
+
+# Linux/Mac
+./scripts/test_e2e.sh
+```
+
+The script:
+1. Builds and starts `aicm-e2e-postgres` and `aicm-e2e-llm-mock` via `infra/docker-compose.e2e.yml`.
+2. Waits for both services to pass their health checks (up to 30 seconds).
+3. Runs `go test ./tests/... -v -count=1 -timeout 180s` pointed at `http://localhost:11434` (mock LLM) and `localhost:5432` (Postgres).
+
+**About the Mock LLM (`infra/llm-mock/`):**
+The mock server is a tiny Go HTTP server that listens on port 11434 (the same port as Ollama). It inspects keywords in the incoming `prompt` field and returns structurally-correct canned responses:
+
+| Agent | Prompt keyword | Mock response |
+|-------|---------------|---------------|
+| Supervisor (intent) | "reply with only one word" | `query`, `insight`, `plan`, etc. |
+| Analyst (SQL) | "sqlforge" / "read-only" | Valid `SELECT` SQL in a code block |
+| Strategist | "chain-of-thought" | Business insight paragraph |
+| Planner | "actionforge" | `ACTION:` formatted blocks |
+| Liaison | "draft" + "email" | Professional email body |
+
+To run the mock LLM standalone (useful for local debugging without Docker):
+```bash
+cd infra/llm-mock
+go run main.go
+# Server starts on :11434
 ```
 
 ### Building Production Images & Pushing to DockerHub

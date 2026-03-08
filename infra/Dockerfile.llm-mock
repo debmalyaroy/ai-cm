@@ -1,0 +1,11 @@
+FROM golang:1.24-alpine AS builder
+WORKDIR /app
+COPY llm-mock/ .
+RUN go build -o /llm-mock main.go
+
+FROM alpine:latest
+COPY --from=builder /llm-mock /llm-mock
+EXPOSE 11434
+HEALTHCHECK --interval=5s --timeout=3s --retries=5 \
+    CMD wget -qO- http://localhost:11434/api/health || exit 1
+CMD ["/llm-mock"]

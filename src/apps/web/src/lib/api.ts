@@ -79,6 +79,10 @@ export const dashboardAPI = {
         fetchAPI<{ explanation: string }>('/api/dashboard/explain', {
             body: JSON.stringify({ card_type: cardType, card_data: cardData }),
         }),
+    getCardActions: (cardType: string, cardData?: unknown) =>
+        fetchAPI<{ actions: string[] }>('/api/dashboard/card-actions', {
+            body: JSON.stringify({ card_type: cardType, card_data: cardData }),
+        }),
 };
 
 // Chat Streaming API (SSE — kept for real-time streaming)

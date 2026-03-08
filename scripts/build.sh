@@ -60,6 +60,8 @@ build_frontend() {
         info "Installing dependencies..."
         npm install
     fi
+    info "Running frontend tests..."
+    npm test || error "Frontend tests failed"
     info "Building Vite/React app..."
     npm run build
     info "Frontend built: src/apps/web/dist/"

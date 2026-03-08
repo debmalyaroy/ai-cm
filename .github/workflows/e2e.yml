@@ -1,0 +1,63 @@
+name: E2E Tests
+
+on:
+  push:
+    branches: ["master"]
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: aicm
+          POSTGRES_PASSWORD: aicm_secret
+          POSTGRES_DB: aicm
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache-dependency-path: src/backend/go.sum
+
+      - name: Initialize database
+        run: |
+          for f in $(ls infra/postgres/*.sql | sort); do
+            echo "Applying $f ..."
+            PGPASSWORD=aicm_secret psql -h localhost -U aicm -d aicm -f "$f" || true
+          done
+
+      - name: Build and start mock LLM
+        run: |
+          cd infra/llm-mock
+          go run main.go &
+          # Wait until the mock server is accepting connections
+          for i in $(seq 1 15); do
+            if curl -sf http://localhost:11434/api/health > /dev/null 2>&1; then
+              echo "Mock LLM is ready."
+              break
+            fi
+            echo "Waiting for mock LLM... ($i/15)"
+            sleep 1
+          done
+
+      - name: Run E2E tests
+        working-directory: ./src/backend
+        env:
+          DATABASE_URL: postgres://aicm:aicm_secret@localhost:5432/aicm?sslmode=disable
+          LLM_PROVIDER: local
+          OLLAMA_BASE_URL: http://localhost:11434
+        run: go test ./tests/... -v -count=1 -timeout 180s

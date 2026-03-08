@@ -137,3 +137,31 @@ func TestNewPgStore(t *testing.T) {
 		t.Error("db should be nil when passed nil")
 	}
 }
+
+func TestFloat32SliceToVector(t *testing.T) {
+	tests := []struct {
+		name string
+		in   []float32
+		want string
+	}{
+		{"empty", []float32{}, "[]"},
+		{"single", []float32{0.5}, "[0.500000]"},
+		{"multiple", []float32{0.1, 0.2, 0.3}, "[0.100000,0.200000,0.300000]"},
+		{"negative", []float32{-1.0, 0.0, 1.0}, "[-1.000000,0.000000,1.000000]"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := float32SliceToVector(tc.in)
+			if got != tc.want {
+				t.Errorf("float32SliceToVector(%v) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestFloat32SliceToVector_StartsAndEndsWithBrackets(t *testing.T) {
+	got := float32SliceToVector([]float32{1.0, 2.0})
+	if got[0] != '[' || got[len(got)-1] != ']' {
+		t.Errorf("vector should be bracket-delimited; got %q", got)
+	}
+}
