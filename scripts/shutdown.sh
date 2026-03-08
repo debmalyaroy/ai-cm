@@ -17,6 +17,12 @@ for container in aicm-frontend aicm-backend aicm-ollama aicm-postgres; do
     docker rm -f "$container" >/dev/null 2>&1 || true
 done
 
+# Kill any running Ollama processes
+if pgrep -x "ollama" > /dev/null; then
+    echo -e "\033[90m   Stopping Ollama process...\033[0m"
+    pkill -x "ollama" || true
+fi
+
 # Kill any orphan backend/frontend processes
 if pgrep -x "server" > /dev/null; then
     echo -e "\033[90m   Stopping orphan backend processes...\033[0m"

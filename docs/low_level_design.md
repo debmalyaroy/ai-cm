@@ -709,7 +709,6 @@ graph TD
             NGINX["nginx container\n:80 → backend :8080 / frontend"]
             BE["aicm-backend container\n:8080 (Go Gin API)"]
             FE["aicm-frontend container\n(Vite/React static via nginx)"]
-            DOZZLE["Dozzle container\n:4567 (log viewer)"]
         end
 
         subgraph RDS ["RDS db.t4g.micro (ARM64 Graviton2)\naicm-postgres | PostgreSQL 16, 20GB gp3"]
@@ -816,5 +815,5 @@ sequenceDiagram
     Dev->>EC2: SSH via PuTTY
     EC2->>DH: docker compose pull
     EC2->>EC2: docker compose up -d
-    EC2-->>Dev: Verify via Dozzle
+    EC2-->>Dev: Verify via docker logs
 ```

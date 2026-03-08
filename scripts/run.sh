@@ -98,5 +98,6 @@ fi
 
 echo ""
 echo "✅ System started successfully!"
-echo "   Frontend: http://localhost:3000"
-echo "   Backend:  http://localhost:8080"
+echo "   App (nginx): http://localhost:8181"
+echo "   Frontend:    http://localhost:3000"
+echo "   Backend:     http://localhost:8080"

@@ -34,7 +34,7 @@ This guide documents the actual AI-CM deployment on AWS using **Graviton (ARM64)
 
 | Service | Resource Name | Role | Cost |
 |---|---|---|---|
-| **EC2 t4g.small** | `aicm-server` | Runs all Docker containers (backend, frontend, nginx, Dozzle) | Free trial through Dec 31, 2026 (750 hrs/month); ~$12.10/month after |
+| **EC2 t4g.small** | `aicm-server` | Runs all Docker containers (backend, frontend, nginx) | Free trial through Dec 31, 2026 (750 hrs/month); ~$12.10/month after |
 | **RDS PostgreSQL db.t4g.micro** | `aicm-postgres` | Primary database with pgvector for embeddings | Free (permanent RDS Free Tier since March 2022) |
 | **Amazon Bedrock** | — | LLM inference for all 6 agents (Meta Llama 3.1 70B, us-east-1) | Pay-per-token, no free tier |
 | **CloudWatch Logs** | `/aicm/docker` | Docker container logs streamed from EC2 | Free tier (up to 5GB/month) |
@@ -100,7 +100,7 @@ Vite/React requires a running Node.js server container in production, which is h
 
 #### Current Deployment (`t4g.small` + `db.t4g.micro`):
 The **actual deployed setup** uses Graviton2 instances for better price-performance:
-1. **EC2 `t4g.small`**: **$0 through Dec 31, 2026** (free trial, 750 hrs/month) — 2 vCPU, 2GB RAM. Handles Go backend + Next.js + nginx + Dozzle comfortably without swap. After the trial: ~$12.10/month on-demand.
+1. **EC2 `t4g.small`**: **$0 through Dec 31, 2026** (free trial, 750 hrs/month) — 2 vCPU, 2GB RAM. Handles Go backend + Vite/React + nginx comfortably without swap. After the trial: ~$12.10/month on-demand.
 2. **RDS `db.t4g.micro`**: **$0 (permanent RDS Free Tier)** — 1 vCPU, 1GB RAM, 20GB gp3 (KMS-encrypted).
 3. **Total (during free trial)**: ~$0/month compute + ~$1/month KMS + Bedrock usage (~$1–$4/month).
 
@@ -737,7 +737,7 @@ services:
 2. Re-deploy. The `aicm-ec2-role` IAM policy you created earlier already grants permission to write to this log group.
 3. Open the **AWS Console → CloudWatch → Log groups**. You can now view, search, and set alarms on all application logs directly from the browser without SSH access.
 
-> **Tip on Windows**: When you're not SSH-ed in, use the **Dozzle log viewer** instead. It runs as a container (`aicm-log-viewer`) and is accessible at `http://your-elastic-ip:4567` — no SSH needed for day-to-day log monitoring.
+> **Tip on Windows**: When you're not SSH-ed in, use **AWS CloudWatch Logs** to view container logs directly in the browser — no SSH needed for day-to-day log monitoring.
 
 ---
 
@@ -747,8 +747,6 @@ services:
 Internet → Elastic IP → EC2 Port 80 → nginx
                                          ├── /api/* → backend:8080 (Go, Bedrock)
                                          └── /      → frontend:3000 (Vite/React)
-
-EC2 Port 4567 → Dozzle log viewer (Docker container logs via browser)
 ```
 
 The `nginx` container handles:
@@ -970,7 +968,6 @@ Based on the live AWS inspection, here is the current security state — items m
 |---|---|---|
 | SSH (port 22) | ⚠️ Open to `0.0.0.0/0` | Restrict to your IP in `aicm-ec2-sg` |
 | HTTP (port 80) | OK — open to `0.0.0.0/0` | Intended for public app access |
-| Dozzle (port 4567) | ⚠️ Open to `0.0.0.0/0` | Restrict to your IP or remove after debugging |
 | RDS local access | ⚠️ `aicm-rds-sg` allows `122.172.80.151/32` | Remove after DB init is complete |
 | RDS public access | OK — `PubliclyAccessible: false` | Correct |
 | RDS encryption | OK — KMS-encrypted at rest | Correct |
@@ -1037,16 +1034,15 @@ For the start/stop CLI user on your local machine, create a separate IAM user an
 
 > **Region note**: Configure `ap-south-1` here — this is the region for EC2 and RDS operations (start/stop/status). The backend's Bedrock API calls use a separate region (`us-east-1`) configured in `config/config.prod.yaml`, not the AWS CLI profile.
 
-### Restrict SSH and Dozzle Access
+### Restrict SSH Access
 
-The current `aicm-ec2-sg` security group has **SSH (port 22) and Dozzle log viewer (port 4567) open to `0.0.0.0/0`**. Restrict these to your IP:
+The current `aicm-ec2-sg` security group has **SSH (port 22) open to `0.0.0.0/0`**. Restrict it to your IP:
 
 1. EC2 → Security Groups → `aicm-ec2-sg` → **Edit inbound rules**
 2. SSH rule: change Source from `0.0.0.0/0` to **My IP**
-3. Port 4567 (Dozzle): change Source from `0.0.0.0/0` to **My IP**
-4. Click **Save rules**
+3. Click **Save rules**
 
-If your home IP changes (dynamic ISP), update both rules. HTTP port 80 can remain open to `0.0.0.0/0`.
+If your home IP changes (dynamic ISP), update the SSH rule. HTTP port 80 can remain open to `0.0.0.0/0`.
 
 ### Remove Temporary RDS Local Access
 

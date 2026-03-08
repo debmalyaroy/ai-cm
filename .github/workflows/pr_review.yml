@@ -19,16 +19,16 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.22"
+          go-version: "1.24"
           cache-dependency-path: src/backend/go.sum
 
       - name: Install dependencies
         run: go mod download
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v4
+        uses: golangci/golangci-lint-action@v6
         with:
-          version: v1.56.2
+          version: v1.64.8
           working-directory: src/backend
           args: --timeout=5m
 
@@ -80,5 +80,3 @@ jobs:
       # Ensure the frontend actually builds (no typescript type errors, etc.)
       - name: Build Frontend Check
         run: npm run build
-        env:
-          NEXT_PUBLIC_API_URL: 'http://localhost'

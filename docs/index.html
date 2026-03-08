@@ -458,15 +458,16 @@
         #lightbox.hidden { display: none; }
         .lb-inner {
             position: relative;
-            max-width: 92vw; max-height: 92vh;
+            width: 82vw;
+            height: 82vh;
             background: var(--color-surface);
             border: 1px solid var(--color-border);
             border-radius: 12px;
-            padding: 20px;
+            padding: 52px 20px 20px;
             overflow: hidden;
             cursor: default;
             display: flex; flex-direction: column;
-            align-items: center; justify-content: center;
+            transition: width 0.2s ease, height 0.2s ease;
         }
         /* Toolbar: close + zoom controls */
         .lb-toolbar {
@@ -487,16 +488,17 @@
         }
         .lb-btn:hover { color: var(--color-primary); border-color: var(--color-primary); }
         .lb-btn.lb-close:hover { color: var(--color-danger); border-color: var(--color-danger); }
-        #lb-img { max-width: 88vw; max-height: 88vh; object-fit: contain; border-radius: 8px; display: none; }
+        #lb-img { display: none; max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 8px; flex: 1; }
         /* SVG viewport: scrollable, zoomable */
         #lb-svg-viewport {
             display: none;
+            flex: 1;
+            width: 100%;
             overflow: auto;
-            max-width: 88vw; max-height: calc(88vh - 20px);
             cursor: grab;
         }
         #lb-svg-viewport:active { cursor: grabbing; }
-        #lb-svg-scaler { transform-origin: top left; transition: transform 0.15s ease; }
+        #lb-svg-scaler { display: inline-block; transform-origin: top left; transition: transform 0.2s ease; }
         #lb-svg-viewport svg { display: block; max-width: none; height: auto; }
 
         /* Loading / error */
@@ -848,8 +850,29 @@ async function loadDoc(id, pushState) {
 }
 
 // ── Lightbox ──────────────────────────────────────────────────────────────
-let _lbScale = 1;
-const LB_MIN = 0.3, LB_MAX = 4;
+// Each zoom step resizes the modal AND scales the SVG content together
+const LB_STEPS = [
+    { w: 52, h: 52, scale: 0.45 },
+    { w: 64, h: 64, scale: 0.65 },
+    { w: 74, h: 74, scale: 0.82 },
+    { w: 82, h: 82, scale: 1.00 }, // default (index 3)
+    { w: 90, h: 88, scale: 1.22 },
+    { w: 95, h: 93, scale: 1.48 },
+    { w: 98, h: 97, scale: 1.75 },
+];
+const LB_DEFAULT_STEP = 3;
+let _lbStep = LB_DEFAULT_STEP;
+
+function _applyLbSize() {
+    const step  = LB_STEPS[_lbStep];
+    const inner = document.querySelector('.lb-inner');
+    inner.style.width  = step.w + 'vw';
+    inner.style.height = step.h + 'vh';
+    const vp = document.getElementById('lb-svg-viewport');
+    if (vp.style.display !== 'none') {
+        document.getElementById('lb-svg-scaler').style.transform = `scale(${step.scale})`;
+    }
+}
 
 function openLightbox(opts) {
     const lb         = document.getElementById('lightbox');
@@ -857,6 +880,8 @@ function openLightbox(opts) {
     const lbViewport = document.getElementById('lb-svg-viewport');
     const lbScaler   = document.getElementById('lb-svg-scaler');
     const zoomBtns   = ['lb-zoom-in', 'lb-zoom-out', 'lb-zoom-reset'];
+
+    _lbStep = LB_DEFAULT_STEP;
 
     if (opts.type === 'img') {
         lbImg.src = opts.src;
@@ -868,12 +893,18 @@ function openLightbox(opts) {
     } else {
         lbImg.style.display = 'none';
         lbImg.src = '';
-        _lbScale = 1;
         lbScaler.innerHTML = opts.svgHtml || '';
-        lbScaler.style.transform = 'scale(1)';
+        lbScaler.style.transform = `scale(${LB_STEPS[LB_DEFAULT_STEP].scale})`;
         lbViewport.style.display = 'block';
         zoomBtns.forEach(id => document.getElementById(id).style.display = 'flex');
     }
+
+    // Reset modal to default size
+    const inner = document.querySelector('.lb-inner');
+    const def = LB_STEPS[LB_DEFAULT_STEP];
+    inner.style.width  = def.w + 'vw';
+    inner.style.height = def.h + 'vh';
+
     lb.classList.remove('hidden');
     document.body.style.overflow = 'hidden';
 }
@@ -884,13 +915,12 @@ function closeLightbox() {
 }
 
 function lbZoom(delta) {
-    const scaler = document.getElementById('lb-svg-scaler');
     if (delta === 0) {
-        _lbScale = 1;
+        _lbStep = LB_DEFAULT_STEP;
     } else {
-        _lbScale = Math.min(LB_MAX, Math.max(LB_MIN, _lbScale + delta));
+        _lbStep = Math.max(0, Math.min(LB_STEPS.length - 1, _lbStep + (delta > 0 ? 1 : -1)));
     }
-    scaler.style.transform = `scale(${_lbScale})`;
+    _applyLbSize();
 }
 
 document.addEventListener('keydown', e => {
