@@ -4,11 +4,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI-CM: The AI Category Manager Copilot</title>
+    <title>AI-CM Master Solution - Interactive Solution Report</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
@@ -16,23 +18,10 @@
         tailwind.config = {
             theme: {
                 extend: {
-                    fontFamily: {
-                        sans: ['Inter', 'sans-serif'],
-                    },
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
                     colors: {
-                        brand: {
-                            50: '#f0fdf4',
-                            100: '#dcfce7',
-                            500: '#22c55e',
-                            700: '#15803d',
-                            900: '#14532d',
-                        },
-                        accent: {
-                            50: '#eff6ff',
-                            100: '#dbeafe',
-                            500: '#3b82f6',
-                            700: '#1d4ed8'
-                        }
+                        brand: { 50: '#f0fdf4', 100: '#dcfce7', 500: '#22c55e', 700: '#15803d', 900: '#14532d' },
+                        accent: { 50: '#eff6ff', 100: '#dbeafe', 500: '#3b82f6', 700: '#1d4ed8' }
                     }
                 }
             }
@@ -49,64 +38,101 @@
             position: relative;
             width: 100%;
             max-width: 600px;
-            margin-left: auto;
-            margin-right: auto;
-            height: 300px;
-            max-height: 400px;
-        }
-
-        @media (min-width: 768px) {
-            .chart-container {
-                height: 350px;
-            }
-        }
-
-        .fade-in {
-            animation: fadeIn 0.5s ease-in-out;
-        }
-
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(10px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+            margin: 0 auto;
+            height: 350px;
         }
 
         /* Print Specific Styles for PDF Generation */
         @media print {
             @page {
                 size: letter landscape;
-                margin: 0.5in;
+                margin: 0.3in;
             }
 
             body {
                 background-color: white !important;
-                -webkit-print-color-adjust: exact;
-                print-color-adjust: exact;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                font-size: 10pt;
             }
 
-            section,
-            header,
-            footer,
+            /* Section Paging Control */
+            header {
+                break-after: page;
+                height: 95vh !important;
+            }
+
+            #why-ai {
+                break-before: avoid;
+                break-after: page;
+            }
+
+            #agents-p1 {
+                break-before: page;
+                break-after: page;
+            }
+
+            #agents-p2 {
+                break-before: page;
+                break-after: page;
+            }
+
+            #logic {
+                break-before: page;
+                break-after: page;
+            }
+
+            #cloud {
+                break-before: page;
+                break-after: page;
+            }
+
+            #ux {
+                break-before: page;
+                break-after: page;
+            }
+
+            #aws {
+                break-before: page;
+                break-after: avoid;
+            }
+
+            section {
+                padding-top: 0.5rem !important;
+                padding-bottom: 0 !important;
+                margin: 0 !important;
+                height: auto !important;
+            }
+
             .print-avoid-break,
             .agent-card,
-            .subgraph {
-                break-inside: avoid;
-                page-break-inside: avoid;
-                margin-bottom: 2rem;
+            .subgraph,
+            .aws-stack-card {
+                break-inside: avoid !important;
             }
 
+            /* Scaling Logic for Large Sections */
+            #logic-content,
+            #cloud-content {
+                transform: scale(0.75);
+                transform-origin: top center;
+                width: 133% !important;
+                margin-left: -16.5% !important;
+            }
+
+            #ux-print-container {
+                transform: scale(0.85);
+                transform-origin: top center;
+                width: 100% !important;
+            }
+
+            /* UI cleanup for print */
             nav,
-            .no-print {
+            .no-print,
+            .intro-para-hide {
                 display: none !important;
             }
 
-            /* Ensure wide diagrams scale down to fit the page */
             .overflow-x-auto {
                 overflow: visible !important;
             }
@@ -117,53 +143,34 @@
             }
 
             .chart-container {
-                max-width: 100% !important;
-                height: 300px !important;
+                height: 250px !important;
+                width: 100% !important;
+                display: block !important;
+                visibility: visible !important;
             }
 
-            /* Ensure colors and borders render properly in PDF */
-            .subgraph,
-            .agent-card,
-            .bg-slate-900,
-            .bg-brand-600 {
-                -webkit-print-color-adjust: exact;
-                print-color-adjust: exact;
+            .bg-slate-900 {
+                background-color: #0f172a !important;
+                color: white !important;
             }
 
-            .grid {
-                display: grid !important;
+            h2 {
+                font-size: 20pt !important;
+                margin-bottom: 0.75rem !important;
+            }
+
+            footer {
+                display: none !important;
             }
         }
 
-        /* Flow connection lines for Logic Diagrams */
         .connector-v {
             border-left: 2px dashed #cbd5e1;
             width: 1px;
-            height: 20px;
+            height: 24px;
             margin: 0 auto;
         }
 
-        .connector-h-full {
-            border-top: 2px dashed #cbd5e1;
-            height: 1px;
-            width: 100%;
-        }
-
-        /* Agent Card Styling */
-        .agent-card {
-            border: 1px solid #e2e8f0;
-            background: white;
-            border-radius: 1rem;
-            padding: 1.5rem;
-            transition: all 0.3s ease;
-        }
-
-        .agent-card:hover {
-            border-color: #22c55e;
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-        }
-
-        /* Cloud Architecture Subgraphs */
         .subgraph {
             border: 2px solid #e2e8f0;
             border-radius: 1.5rem;
@@ -181,23 +188,25 @@
             font-size: 10px;
             font-weight: 800;
             text-transform: uppercase;
-            letter-spacing: 0.05em;
             color: #64748b;
+        }
+
+        .agent-card {
+            border: 1px solid #e2e8f0;
+            background: white;
+            border-radius: 1rem;
+            padding: 1.5rem;
+            transition: all 0.3s ease;
+        }
+
+        .agent-card:hover {
+            border-color: #22c55e;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
         }
     </style>
 </head>
 
-<body class="antialiased selection:bg-brand-500 selection:text-white">
-
-    <!-- Application Structure Plan: 
-         - **Hero Section**: Value proposition.
-         - **Section 1: Why AI**: GenAI vs Rule-based context.
-         - **Section 2: Cognitive Workforce**: Flat list of 7 specialized agents.
-         - **Section 3: System Logic Architecture**: MAS internal orchestration flow.
-         - **Section 4: Cloud & CI/CD Architecture**: Multi-region deployment topology.
-         - **Section 5: UX Value**: Transformation pillars.
-         - **Section 6: AWS Stack**: Performance/Hardware cards.
-    -->
+<body class="antialiased">
 
     <!-- Navigation -->
     <nav class="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200 shadow-sm no-print">
@@ -205,40 +214,71 @@
             <div class="flex justify-between h-16">
                 <div class="flex items-center">
                     <span class="text-2xl font-bold text-brand-700 tracking-tight">AI-CM<span
-                            class="text-slate-400 font-light"> Copilot</span></span>
+                            class="text-slate-400 font-light"> Master</span></span>
                 </div>
-                <div class="hidden md:flex items-center space-x-8">
-                    <a href="#why-ai"
-                        class="text-sm font-medium text-slate-600 hover:text-brand-600 transition-colors">Why AI?</a>
-                    <a href="#agents"
-                        class="text-sm font-medium text-slate-600 hover:text-brand-600 transition-colors">Workforce</a>
-                    <a href="#system-logic"
-                        class="text-sm font-medium text-slate-600 hover:text-brand-600 transition-colors">System
-                        Logic</a>
-                    <a href="#cloud-arch"
-                        class="text-sm font-medium text-slate-600 hover:text-brand-600 transition-colors">Cloud</a>
-                    <a href="#ux-value"
-                        class="text-sm font-medium text-slate-600 hover:text-brand-600 transition-colors">UX Value</a>
-                    <a href="#aws" class="text-sm font-medium text-slate-600 hover:text-brand-600 transition-colors">AWS
-                        Stack</a>
+                <div class="hidden md:flex items-center space-x-6 text-sm font-medium text-slate-600">
+                    <a href="#why-ai" class="hover:text-brand-600 transition-colors">Why AI?</a>
+                    <a href="#agents-p1" class="hover:text-brand-600 transition-colors">Workforce</a>
+                    <a href="#logic" class="hover:text-brand-600 transition-colors">Logic</a>
+                    <a href="#cloud" class="hover:text-brand-600 transition-colors">Cloud</a>
+                    <a href="#ux" class="hover:text-brand-600 transition-colors">UX Value</a>
+                    <a href="#aws" class="hover:text-brand-600 transition-colors">AWS Stack</a>
                 </div>
             </div>
         </div>
     </nav>
 
-    <!-- Hero -->
-    <header class="bg-slate-900 text-white pt-20 pb-24 border-b-8 border-brand-500 relative overflow-hidden">
+    <!-- Header -->
+    <header class="bg-slate-900 text-white pt-16 pb-20 border-b-8 border-brand-500 relative overflow-hidden">
         <div
             class="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-brand-400 via-slate-900 to-slate-900">
         </div>
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center">
-            <h1 class="text-4xl md:text-6xl font-bold tracking-tight mb-6">
-                Autonomous <span class="text-brand-400">Retail Intelligence.</span>
-            </h1>
-            <p class="mt-4 text-xl text-slate-300 max-w-3xl mx-auto font-light leading-relaxed">
-                An agentic co-pilot for Category Managers, replacing manual data hunting with a self-correcting
-                workforce on AWS Graviton2.
-            </p>
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+            <div class="flex flex-col md:flex-row items-center gap-12">
+                <div class="md:w-3/5 text-center md:text-left">
+                    <h1 class="text-5xl md:text-7xl font-bold tracking-tighter mb-6">Autonomous <span
+                            class="text-brand-400">Retail.</span></h1>
+                    <p class="text-xl text-slate-300 font-light leading-relaxed mb-8">
+                        AI-CM is an agentic co-pilot for Category Managers, replacing manual data hunting with a
+                        self-correcting workforce on AWS Graviton2 and Bedrock.
+                    </p>
+                    <div class="flex flex-wrap justify-center md:justify-start gap-4 no-print">
+                        <div
+                            class="flex items-center px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-xs font-mono">
+                            <span class="text-brand-400 mr-2 text-brand-500">●</span> v1.2 Production Deployed
+                        </div>
+                    </div>
+                </div>
+                <div class="md:w-2/5 flex justify-center">
+                    <div
+                        class="bg-white/10 p-10 rounded-[3rem] border border-white/20 w-full max-w-sm print-avoid-break shadow-2xl relative overflow-hidden">
+                        <h3 class="text-center text-sm font-bold text-slate-400 uppercase tracking-widest mb-8">
+                            Productivity Shift</h3>
+
+                        <!-- High-Fidelity CSS Gauge Infographic -->
+                        <div class="relative h-44 w-44 mx-auto rounded-full flex items-center justify-center"
+                            style="background: conic-gradient(#22c55e 70%, #1f2937 0);">
+                            <div
+                                class="absolute inset-0 m-6 bg-slate-900 rounded-full flex items-center justify-center">
+                                <div class="text-center">
+                                    <div class="text-5xl font-black text-brand-400 tracking-tighter">70%</div>
+                                    <div class="text-[9px] text-slate-300 font-bold uppercase tracking-widest">Reclaimed
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-8 flex justify-between px-4 text-[9px] uppercase font-bold tracking-wider">
+                            <div class="flex items-center gap-2"><span
+                                    class="w-2 h-2 rounded-full bg-brand-500 shadow-[0_0_8px_#22c55e]"></span> <span
+                                    class="text-slate-300">Strategy</span></div>
+                            <div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-white/20"></span>
+                                <span class="text-slate-500">Manual Chasing</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </header>
 
@@ -246,240 +286,218 @@
 
         <!-- SECTION 1: Why AI is Required -->
         <section id="why-ai" class="py-12 scroll-mt-20">
-            <div class="mb-10 text-center max-w-3xl mx-auto">
-                <h2 class="text-3xl font-bold text-slate-900 mb-4 tracking-tight">1. Why AI is Required</h2>
-                <p class="text-slate-600 leading-relaxed">
-                    Traditional rules engines require anticipating every input variance. AI-CM uses Generative AI to
-                    navigate the context-heavy world of retail analytics seamlessly.
-                </p>
+            <div class="mb-12 text-center max-w-3xl mx-auto">
+                <h2 class="text-4xl font-bold text-slate-900 mb-4 tracking-tight">1. Why AI is Required</h2>
             </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
-                <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-                    <div class="text-brand-600 text-2xl mb-4">💬</div>
-                    <h3 class="font-bold text-lg mb-2">The "Natural Language" Problem</h3>
-                    <p class="text-sm text-slate-600">Rule-based NLP fails on novel phrasing and typos. AI understands
-                        semantic weight, allowing Category Managers to ask questions in plain business English.</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div
+                    class="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm border-t-4 border-t-brand-500 print-avoid-break">
+                    <div class="flex items-center gap-4 mb-4">
+                        <div
+                            class="w-12 h-12 rounded-xl bg-brand-50 flex items-center justify-center text-2xl text-brand-600">
+                            <i class="fa-solid fa-language"></i>
+                        </div>
+                        <h3 class="text-xl font-bold text-slate-900">The Linguistic Barrier</h3>
+                    </div>
+                    <p class="text-sm text-slate-600 leading-relaxed mb-4">Rule-based NLP requires rigid dictionary
+                        mapping. AI handles spelling, jargon, and intent weight instinctively, ensuring managers don't
+                        need technical query knowledge.</p>
+                    <div class="text-[11px] font-bold text-brand-700 bg-brand-50 p-3 rounded-lg italic text-balance">AI
+                        Advantage: Native semantic intent isolation handles spelling and business jargon instinctively.
+                    </div>
                 </div>
-                <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-                    <div class="text-brand-600 text-2xl mb-4">📈</div>
-                    <h3 class="font-bold text-lg mb-2">The "SQL Generation" Problem</h3>
-                    <p class="text-sm text-slate-600">Standard BI breaks on queries requiring novel JOINs. AI-CM builds
-                        SQL dynamically and self-heals based on error feedback—no manual templates needed.</p>
-                </div>
-            </div>
-
-            <div
-                class="bg-slate-50 p-8 rounded-2xl border border-slate-200 flex flex-col md:flex-row items-center gap-8 print-avoid-break">
-                <div class="md:w-1/2">
-                    <h3 class="text-xl font-bold mb-4">Workflow ROI</h3>
-                    <p class="text-slate-600 text-sm mb-4">AI-CM flips the 70/30 time waste ratio, automating data
-                        retrieval layer to free up managers for strategic planning.</p>
-                </div>
-                <div class="md:w-1/2 chart-container">
-                    <canvas id="timeAllocationChart"></canvas>
+                <div
+                    class="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm border-t-4 border-t-accent-500 print-avoid-break">
+                    <div class="flex items-center gap-4 mb-4">
+                        <div
+                            class="w-12 h-12 rounded-xl bg-accent-50 flex items-center justify-center text-2xl text-accent-600">
+                            <i class="fa-solid fa-code-merge"></i>
+                        </div>
+                        <h3 class="text-xl font-bold text-slate-900">Dynamic SQL Self-Healing</h3>
+                    </div>
+                    <p class="text-sm text-slate-600 leading-relaxed mb-4">Mapping to 15+ tables via templates is
+                        brittle. Our Analyst agent uses a ReAct loop to interpret schema errors and self-correct SQL
+                        on-the-fly without developer intervention.</p>
+                    <div class="text-[11px] font-bold text-accent-700 bg-accent-50 p-3 rounded-lg italic text-balance">
+                        AI Advantage: Autonomous navigation of complex star-schema relational data.</div>
                 </div>
             </div>
         </section>
 
-        <!-- SECTION 2: The Cognitive Workforce -->
-        <section id="agents" class="py-12 scroll-mt-20">
-            <div class="mb-10 text-center max-w-3xl mx-auto">
-                <h2 class="text-3xl font-bold text-slate-900 mb-4 tracking-tight">2. The Cognitive Workforce</h2>
+        <!-- SECTION 2A: Cognitive Workforce Page 1 (1-3) -->
+        <section id="agents-p1" class="py-12 scroll-mt-20">
+            <div class="mb-12 text-center max-w-3xl mx-auto">
+                <h2 class="text-4xl font-bold text-slate-900 mb-4 tracking-tight">2. The Cognitive Workforce</h2>
             </div>
-
-            <div class="space-y-8">
-                <!-- Supervisor -->
+            <div class="space-y-6">
+                <!-- 1. Supervisor -->
                 <div class="agent-card print-avoid-break">
-                    <div class="flex flex-col md:flex-row gap-6">
-                        <div class="md:w-1/4">
-                            <div class="flex items-center gap-3 mb-4">
-                                <span class="text-3xl">🎛️</span>
-                                <h3 class="text-xl font-bold text-slate-900">Supervisor</h3>
-                            </div>
-                            <span
-                                class="inline-block bg-slate-100 text-slate-600 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded">Orchestrator</span>
+                    <div class="flex gap-6">
+                        <div class="w-1/4">
+                            <div class="text-3xl mb-2">🎛️</div>
+                            <h3 class="text-lg font-bold text-slate-900">Supervisor</h3>
+                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Orchestrator</p>
                         </div>
-                        <div
-                            class="md:w-3/4 grid grid-cols-1 md:grid-cols-2 gap-6 border-l-0 md:border-l border-slate-100 md:pl-6">
+                        <div class="w-3/4 grid grid-cols-2 gap-4 border-l pl-6">
                             <div>
-                                <h4 class="text-xs font-bold text-slate-400 uppercase mb-2">Technical Architecture</h4>
-                                <p class="text-sm text-slate-700 leading-relaxed">Few-shot intent classifier with a
-                                    regex-based <strong>Clarification Gate</strong> to handle vague queries at zero
-                                    token cost.</p>
+                                <h4 class="text-[9px] font-bold text-slate-500 uppercase mb-1">Architecture</h4>
+                                <p class="text-xs text-slate-600">Few-shot classification with a <span
+                                        class="font-semibold text-slate-800">Clarification Gate</span> to handle vague
+                                    queries at zero token cost.</p>
                             </div>
                             <div>
-                                <h4 class="text-xs font-bold text-brand-700 uppercase mb-2">AI Justification</h4>
-                                <p class="text-sm text-brand-900 leading-relaxed">Isolates intent in multi-context
-                                    strings where keyword matchers trigger false positives.</p>
+                                <h4 class="text-[9px] font-bold text-brand-700 uppercase mb-1">AI Necessity</h4>
+                                <p class="text-xs text-brand-900 font-bold">Isolates intent in multi-context strings
+                                    where keyword matchers fail.</p>
                             </div>
                         </div>
                     </div>
                 </div>
-
-                <!-- Analyst -->
+                <!-- 2. Analyst -->
                 <div class="agent-card print-avoid-break">
-                    <div class="flex flex-col md:flex-row gap-6">
-                        <div class="md:w-1/4">
-                            <div class="flex items-center gap-3 mb-4">
-                                <span class="text-3xl">📊</span>
-                                <h3 class="text-xl font-bold text-slate-900">Analyst</h3>
-                            </div>
-                            <span
-                                class="inline-block bg-brand-100 text-brand-700 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded">Text-to-SQL</span>
+                    <div class="flex gap-6">
+                        <div class="w-1/4">
+                            <div class="text-3xl mb-2">📊</div>
+                            <h3 class="text-lg font-bold text-slate-900">Analyst</h3>
+                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Text-to-SQL</p>
                         </div>
-                        <div
-                            class="md:w-3/4 grid grid-cols-1 md:grid-cols-2 gap-6 border-l-0 md:border-l border-slate-100 md:pl-6">
+                        <div class="w-3/4 grid grid-cols-2 gap-4 border-l pl-6">
                             <div>
-                                <h4 class="text-xs font-bold text-slate-400 uppercase mb-2">Technical Architecture</h4>
-                                <p class="text-sm text-slate-700 leading-relaxed">Uses <strong>ReAct pattern</strong>
-                                    (Reason + Act). If SQL fails, the agent interprets the error message and self-heals
-                                    syntax dynamically.</p>
+                                <h4 class="text-[9px] font-bold text-slate-500 uppercase mb-1">Architecture</h4>
+                                <p class="text-xs text-slate-600">Implements <span
+                                        class="font-semibold text-slate-800">ReAct reasoning</span> loops to interpret
+                                    DB errors and self-heal SQL syntax dynamically.</p>
                             </div>
                             <div>
-                                <h4 class="text-xs font-bold text-brand-700 uppercase mb-2">AI Justification</h4>
-                                <p class="text-sm text-brand-900 leading-relaxed">Autonomous navigation of 15+
-                                    relational tables eliminates the maintenance of brittle SQL templates.</p>
+                                <h4 class="text-[9px] font-bold text-brand-700 uppercase mb-1">AI Necessity</h4>
+                                <p class="text-xs text-brand-900 font-bold">Navigates 15+ relational tables without
+                                    needing brittle manual templates.</p>
                             </div>
                         </div>
                     </div>
                 </div>
-
-                <!-- Strategist -->
+                <!-- 3. Strategist -->
                 <div class="agent-card print-avoid-break">
-                    <div class="flex flex-col md:flex-row gap-6">
-                        <div class="md:w-1/4">
-                            <div class="flex items-center gap-3 mb-4">
-                                <span class="text-3xl">🧠</span>
-                                <h3 class="text-xl font-bold text-slate-900">Strategist</h3>
-                            </div>
-                            <span
-                                class="inline-block bg-accent-100 text-accent-700 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded">Chain-of-Thought</span>
+                    <div class="flex gap-6">
+                        <div class="w-1/4">
+                            <div class="text-3xl mb-2">🧠</div>
+                            <h3 class="text-lg font-bold text-slate-900">Strategist</h3>
+                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Reasoning</p>
                         </div>
-                        <div
-                            class="md:w-3/4 grid grid-cols-1 md:grid-cols-2 gap-6 border-l-0 md:border-l border-slate-100 md:pl-6">
+                        <div class="w-3/4 grid grid-cols-2 gap-4 border-l pl-6">
                             <div>
-                                <h4 class="text-xs font-bold text-slate-400 uppercase mb-2">Technical Architecture</h4>
-                                <p class="text-sm text-slate-700 leading-relaxed">Integrated with <strong>pgvector
-                                        Semantic Index</strong>. Injects relevant historical context into the prompt via
-                                    cosine similarity.</p>
+                                <h4 class="text-[9px] font-bold text-slate-500 uppercase mb-1">Architecture</h4>
+                                <p class="text-xs text-slate-600">Uses <span
+                                        class="font-semibold text-slate-800">pgvector Semantic Index</span> to inject
+                                    relevant historical context via RAG for consistency.</p>
                             </div>
                             <div>
-                                <h4 class="text-xs font-bold text-brand-700 uppercase mb-2">AI Justification</h4>
-                                <p class="text-sm text-brand-900 leading-relaxed">Evaluates complex causal chains (e.g.
-                                    correlating competitor price drops with stock levels) that rules can't model.</p>
+                                <h4 class="text-[9px] font-bold text-brand-700 uppercase mb-1">AI Necessity</h4>
+                                <p class="text-xs text-brand-900 font-bold">Evaluates causal links between stock and
+                                    pricing trends that rules can't model.</p>
                             </div>
                         </div>
                     </div>
                 </div>
+            </div>
+        </section>
 
-                <!-- Planner -->
+        <!-- SECTION 2B: Cognitive Workforce Page 2 (4-7) -->
+        <section id="agents-p2" class="py-12 scroll-mt-20">
+            <div class="space-y-6">
+                <!-- 4. Planner -->
                 <div class="agent-card print-avoid-break">
-                    <div class="flex flex-col md:flex-row gap-6">
-                        <div class="md:w-1/4">
-                            <div class="flex items-center gap-3 mb-4">
-                                <span class="text-3xl">📋</span>
-                                <h3 class="text-xl font-bold text-slate-900">Planner</h3>
-                            </div>
-                            <span
-                                class="inline-block bg-slate-100 text-slate-600 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded">Action
-                                Engine</span>
+                    <div class="flex gap-6">
+                        <div class="w-1/4">
+                            <div class="text-3xl mb-2">📋</div>
+                            <h3 class="text-lg font-bold text-slate-900">Planner</h3>
+                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Action Engine</p>
                         </div>
-                        <div
-                            class="md:w-3/4 grid grid-cols-1 md:grid-cols-2 gap-6 border-l-0 md:border-l border-slate-100 md:pl-6">
+                        <div class="w-3/4 grid grid-cols-2 gap-4 border-l pl-6">
                             <div>
-                                <h4 class="text-xs font-bold text-slate-400 uppercase mb-2">Technical Architecture</h4>
-                                <p class="text-sm text-slate-700 leading-relaxed">Outputs strict JSON conforming to
-                                    <code>action_log</code> schema for direct persistence and UI rendering.
-                                </p>
+                                <h4 class="text-[9px] font-bold text-slate-500 uppercase mb-1">Architecture</h4>
+                                <p class="text-xs text-slate-600">Outputs strict JSON for <span
+                                        class="font-mono text-xs">action_log</span>. Maps fuzzy strategy to
+                                    deterministic execution steps.</p>
                             </div>
                             <div>
-                                <h4 class="text-xs font-bold text-brand-700 uppercase mb-2">AI Justification</h4>
-                                <p class="text-sm text-brand-900 leading-relaxed">Maps fuzzy business intentions to
-                                    concrete execution parameters with contextual confidence scores.</p>
+                                <h4 class="text-[9px] font-bold text-brand-700 uppercase mb-1">AI Necessity</h4>
+                                <p class="text-xs text-brand-900 font-bold">Assigns contextual confidence scores for
+                                    automated execution proposals.</p>
                             </div>
                         </div>
                     </div>
                 </div>
-
-                <!-- Liaison -->
+                <!-- 5. Liaison -->
                 <div class="agent-card print-avoid-break">
-                    <div class="flex flex-col md:flex-row gap-6">
-                        <div class="md:w-1/4">
-                            <div class="flex items-center gap-3 mb-4">
-                                <span class="text-3xl">✉️</span>
-                                <h3 class="text-xl font-bold text-slate-900">Liaison</h3>
-                            </div>
-                            <span
-                                class="inline-block bg-brand-100 text-brand-700 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded">Communications</span>
+                    <div class="flex gap-6">
+                        <div class="w-1/4">
+                            <div class="text-3xl mb-2">✉️</div>
+                            <h3 class="text-lg font-bold text-slate-900">Liaison</h3>
+                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Stakeholder Comms
+                            </p>
                         </div>
-                        <div
-                            class="md:w-3/4 grid grid-cols-1 md:grid-cols-2 gap-6 border-l-0 md:border-l border-slate-100 md:pl-6">
+                        <div class="w-3/4 grid grid-cols-2 gap-4 border-l pl-6">
                             <div>
-                                <h4 class="text-xs font-bold text-slate-400 uppercase mb-2">Technical Architecture</h4>
-                                <p class="text-sm text-slate-700 leading-relaxed">Context-aware drafting loop. Uses
-                                    RAG-retrieved tone-of-voice and supplier history to personalize prose.</p>
+                                <h4 class="text-[9px] font-bold text-slate-500 uppercase mb-1">Architecture</h4>
+                                <p class="text-xs text-slate-600">Drafts context-aware professional stakeholder emails
+                                    using RAG tone personalization.</p>
                             </div>
                             <div>
-                                <h4 class="text-xs font-bold text-brand-700 uppercase mb-2">AI Justification</h4>
-                                <p class="text-sm text-brand-900 leading-relaxed">Replaces robotic boilerplate with
-                                    tactful communication, saving the user significant manual drafting time.</p>
+                                <h4 class="text-[9px] font-bold text-brand-700 uppercase mb-1">AI Necessity</h4>
+                                <p class="text-xs text-brand-900 font-bold">Replaces robotic templates with tactful,
+                                    situational business prose.</p>
                             </div>
                         </div>
                     </div>
                 </div>
-
-                <!-- Watchdog -->
+                <!-- 6. Watchdog -->
                 <div class="agent-card print-avoid-break">
-                    <div class="flex flex-col md:flex-row gap-6">
-                        <div class="md:w-1/4">
-                            <div class="flex items-center gap-3 mb-4">
-                                <span class="text-3xl">🐕</span>
-                                <h3 class="text-xl font-bold text-slate-900">Watchdog</h3>
-                            </div>
-                            <span
-                                class="inline-block bg-accent-100 text-accent-700 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded">Monitoring</span>
+                    <div class="flex gap-6">
+                        <div class="w-1/4">
+                            <div class="text-3xl mb-2 text-accent-500"><i class="fa-solid fa-dog"></i></div>
+                            <h3 class="text-lg font-bold text-slate-900">Watchdog</h3>
+                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Monitoring</p>
                         </div>
-                        <div
-                            class="md:w-3/4 grid grid-cols-1 md:grid-cols-2 gap-6 border-l-0 md:border-l border-slate-100 md:pl-6">
+                        <div class="w-3/4 grid grid-cols-2 gap-4 border-l pl-6">
                             <div>
-                                <h4 class="text-xs font-bold text-slate-400 uppercase mb-2">Technical Architecture</h4>
-                                <p class="text-sm text-slate-700 leading-relaxed">Operates on a <strong>Distributed Cron
-                                        Scheduler</strong> using DB locks. Hybrid SQL/LLM logic for cost-efficiency.</p>
+                                <h4 class="text-[9px] font-bold text-slate-500 uppercase mb-1">Architecture</h4>
+                                <p class="text-xs text-slate-600 leading-relaxed text-balance">A robust hybrid system
+                                    performing 95% of checks via SQL-based thresholding through a <span
+                                        class="font-semibold text-slate-800">Distributed Cron scheduler
+                                        (pgxpool)</span>. It only escalates to Bedrock LLM for qualitative
+                                    interpretation of non-linear data drift.</p>
                             </div>
                             <div>
-                                <h4 class="text-xs font-bold text-brand-700 uppercase mb-2">AI Justification</h4>
-                                <p class="text-sm text-brand-900 leading-relaxed">Provides "Reasonable Checks" on data
-                                    anomalies to ensure managers only receive high-quality alerts.</p>
+                                <h4 class="text-[9px] font-bold text-brand-700 uppercase mb-1">AI Necessity</h4>
+                                <p class="text-xs text-brand-900 font-bold leading-relaxed">Reduces alert fatigue by
+                                    validating qualitative anomalies that deterministic rules flag as noise, ensuring
+                                    high-signal notifications.</p>
                             </div>
                         </div>
                     </div>
                 </div>
-
-                <!-- Recommender -->
+                <!-- 7. Recommender -->
                 <div class="agent-card print-avoid-break">
-                    <div class="flex flex-col md:flex-row gap-6">
-                        <div class="md:w-1/4">
-                            <div class="flex items-center gap-3 mb-4">
-                                <span class="text-3xl">⚖️</span>
-                                <h3 class="text-xl font-bold text-slate-900">Recommender</h3>
-                            </div>
-                            <span
-                                class="inline-block bg-slate-100 text-slate-600 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded">Rule
-                                Engine</span>
+                    <div class="flex gap-6">
+                        <div class="w-1/4">
+                            <div class="text-3xl mb-2 text-brand-500"><i class="fa-solid fa-scale-balanced"></i></div>
+                            <h3 class="text-lg font-bold text-slate-900">Recommender</h3>
+                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Rule Engine</p>
                         </div>
-                        <div
-                            class="md:w-3/4 grid grid-cols-1 md:grid-cols-2 gap-6 border-l-0 md:border-l border-slate-100 md:pl-6">
+                        <div class="w-3/4 grid grid-cols-2 gap-4 border-l pl-6">
                             <div>
-                                <h4 class="text-xs font-bold text-slate-400 uppercase mb-2">Technical Architecture</h4>
-                                <p class="text-sm text-slate-700 leading-relaxed">Pure Go implementation. Uses
-                                    pre-compiled SQL queries for immediate response for known inventory/price
-                                    thresholds.</p>
+                                <h4 class="text-[9px] font-bold text-slate-500 uppercase mb-1">Architecture</h4>
+                                <p class="text-xs text-slate-600 leading-relaxed text-balance">A specialized <span
+                                        class="font-semibold text-slate-800">Go-native heuristics engine</span>
+                                    executing pre-optimized analytical SQL against the relational warehouse. Engineered
+                                    for sub-second latency to support rapid lookups.</p>
                             </div>
                             <div>
-                                <h4 class="text-xs font-bold text-brand-700 uppercase mb-2">Architecture Role</h4>
-                                <p class="text-sm text-brand-900 leading-relaxed">Supports the AI layer with
-                                    zero-latency baseline heuristic data.</p>
+                                <h4 class="text-[9px] font-bold text-brand-700 uppercase mb-1">Architecture Role</h4>
+                                <p class="text-xs text-brand-900 font-bold leading-relaxed">Governs deterministic
+                                    business logic such as inventory reorder levels and price matching, preserving
+                                    expensive LLM tokens for strategy layers.</p>
                             </div>
                         </div>
                     </div>
@@ -488,189 +506,133 @@
         </section>
 
         <!-- SECTION 3: System Logic Architecture -->
-        <section id="system-logic" class="py-12 scroll-mt-20">
-            <div class="mb-10 text-center max-w-3xl mx-auto">
-                <h2 class="text-3xl font-bold text-slate-900 mb-4 tracking-tight">3. System Logic Architecture</h2>
-            </div>
-
-            <div
-                class="bg-slate-50 border border-slate-200 rounded-3xl p-4 md:p-8 overflow-x-auto print-avoid-break shadow-sm">
-                <div class="min-w-[950px]">
-                    <div class="grid grid-cols-5 gap-4 mb-8">
-                        <div class="col-span-5 text-center text-[10px] uppercase font-bold text-slate-400 mb-2">Client
-                            Layer (React SPA)</div>
-                        <div class="bg-white p-2 rounded border border-slate-200 text-[10px] text-center">Dashboard
-                        </div>
-                        <div class="bg-white p-2 rounded border border-slate-200 text-[10px] text-center">Chat (SSE)
-                        </div>
-                        <div class="bg-white p-2 rounded border border-slate-200 text-[10px] text-center">Actions</div>
-                        <div class="bg-white p-2 rounded border border-slate-200 text-[10px] text-center">Alerts</div>
-                        <div class="bg-white p-2 rounded border border-slate-200 text-[10px] text-center">Reports</div>
-                    </div>
-
-                    <div class="connector-v h-8"></div>
-
-                    <div class="bg-white border-2 border-slate-200 rounded-2xl p-6 mb-8 shadow-inner relative">
+        <section id="logic" class="py-12 scroll-mt-20">
+            <h2 class="text-4xl font-bold text-slate-900 mb-6 tracking-tight text-center">3. System Logic Architecture
+            </h2>
+            <div id="logic-content"
+                class="bg-slate-50 border border-slate-200 rounded-3xl p-8 print-avoid-break shadow-sm">
+                <div class="grid grid-cols-5 gap-4 mb-6">
+                    <div class="col-span-5 text-center text-[10px] uppercase font-bold text-slate-400">Frontend Layer
+                        (React SPA / Vite)</div>
+                    <div class="bg-white p-2 rounded text-[10px] text-center border shadow-sm">Dashboard</div>
+                    <div class="bg-white p-2 rounded text-[10px] text-center border shadow-sm">Chat <span
+                            class="text-[8px] text-accent-600 font-bold">(SSE)</span></div>
+                    <div class="bg-white p-2 rounded text-[10px] text-center border shadow-sm">Actions</div>
+                    <div class="bg-white p-2 rounded text-[10px] text-center border shadow-sm">Alerts</div>
+                    <div class="bg-white p-2 rounded text-[10px] text-center border shadow-sm">Reports</div>
+                </div>
+                <div class="connector-v h-4"></div>
+                <div class="bg-white border-2 border-slate-200 rounded-2xl p-6 relative shadow-inner">
+                    <div
+                        class="absolute -top-3 left-8 bg-slate-900 text-white px-3 py-1 rounded-full text-[9px] font-bold uppercase tracking-widest">
+                        Go Micro-monolith (Gin)</div>
+                    <div class="grid grid-cols-4 gap-4 mb-8">
                         <div
-                            class="absolute -top-3 left-6 bg-slate-900 text-white px-3 py-1 rounded text-[9px] font-bold uppercase">
-                            Go Micro-monolith API</div>
-                        <div class="grid grid-cols-4 gap-4 mb-10">
-                            <div class="bg-accent-50 border border-accent-100 p-3 rounded-lg text-[10px] text-center">
-                                <strong>Handlers</strong>
+                            class="bg-accent-50 border border-accent-100 p-2 rounded text-[10px] text-center text-accent-700 font-bold">
+                            REST Handlers</div>
+                        <div
+                            class="bg-slate-50 border border-slate-200 p-2 rounded text-[10px] text-center font-medium">
+                            Cron Engine <span class="text-[8px] opacity-50">(pgxpool)</span></div>
+                        <div
+                            class="bg-slate-50 border border-slate-200 p-2 rounded text-[10px] text-center font-medium">
+                            Schema Cache</div>
+                        <div
+                            class="bg-brand-50 border border-brand-100 p-2 rounded text-[10px] text-center text-brand-700 font-bold">
+                            Persistence</div>
+                    </div>
+                    <div class="bg-slate-100 rounded-xl p-6 text-center border border-slate-200">
+                        <div
+                            class="bg-brand-600 text-white p-2 rounded font-bold text-xs mb-4 inline-block px-10 shadow-lg uppercase tracking-wider">
+                            Supervisor (Orchestrator)</div>
+                        <div class="flex justify-center gap-2">
+                            <div class="bg-white p-1 rounded border text-[8px] w-24">Watchdog</div>
+                            <div class="bg-white p-1 rounded border text-[8px] w-24 font-bold border-brand-500">Analyst
                             </div>
-                            <div class="bg-slate-50 border border-slate-200 p-3 rounded-lg text-[10px] text-center">
-                                <strong>Cron Scheduler</strong>
-                            </div>
-                            <div class="bg-slate-50 border border-slate-200 p-3 rounded-lg text-[10px] text-center">
-                                <strong>SchemaCache</strong>
-                            </div>
-                            <div class="bg-brand-50 border border-brand-100 p-3 rounded-lg text-[10px] text-center">
-                                <strong>Action Workflow</strong>
-                            </div>
-                        </div>
-                        <div class="relative bg-slate-50 border border-slate-200 rounded-xl p-6">
-                            <div class="flex flex-col items-center">
-                                <div
-                                    class="bg-brand-600 text-white p-3 rounded-lg shadow-md mb-6 w-56 text-center text-xs font-bold">
-                                    Supervisor Agent (MAS)</div>
-                                <div class="grid grid-cols-6 gap-3 w-full">
-                                    <div
-                                        class="bg-white border border-slate-300 p-2 rounded-lg text-[8px] text-center shadow-sm">
-                                        Watchdog</div>
-                                    <div
-                                        class="bg-white border border-slate-300 p-2 rounded-lg text-[8px] text-center shadow-sm font-bold">
-                                        Analyst</div>
-                                    <div
-                                        class="bg-white border border-slate-300 p-2 rounded-lg text-[8px] text-center shadow-sm">
-                                        Strategist</div>
-                                    <div
-                                        class="bg-white border border-slate-300 p-2 rounded-lg text-[8px] text-center shadow-sm">
-                                        Planner</div>
-                                    <div
-                                        class="bg-white border border-slate-300 p-2 rounded-lg text-[8px] text-center shadow-sm">
-                                        Liaison</div>
-                                    <div
-                                        class="bg-white border border-slate-300 p-2 rounded-lg text-[8px] text-center shadow-sm">
-                                        Recommender</div>
-                                </div>
-                            </div>
+                            <div class="bg-white p-1 rounded border text-[8px] w-24">Strategist</div>
+                            <div class="bg-white p-1 rounded border text-[8px] w-24">Planner</div>
+                            <div class="bg-white p-1 rounded border text-[8px] w-24">Liaison</div>
                         </div>
                     </div>
-
-                    <div class="connector-v h-8"></div>
-
-                    <div class="grid grid-cols-3 gap-8 px-10 text-white">
-                        <div class="bg-slate-800 p-4 rounded-xl text-center shadow-lg border-b-4 border-slate-700">
-                            <div class="text-[10px] font-bold">RDS: Meta & Memory</div>
-                        </div>
-                        <div class="bg-slate-800 p-4 rounded-xl text-center shadow-lg border-b-4 border-slate-700">
-                            <div class="text-[10px] font-bold">RDS: Retail Warehouse</div>
-                        </div>
-                        <div class="bg-accent-700 p-4 rounded-xl text-center shadow-lg border-b-4 border-accent-900">
-                            <div class="text-[10px] font-bold">Amazon Bedrock</div>
-                        </div>
-                    </div>
+                </div>
+                <div class="connector-v h-4"></div>
+                <div class="grid grid-cols-3 gap-12 px-20 text-balance">
+                    <div
+                        class="bg-slate-800 p-3 rounded-xl text-center text-white text-[9px] font-bold uppercase tracking-widest border-b-4 border-slate-950 shadow-lg">
+                        Memory <span class="text-accent-400">(3-Tier)</span></div>
+                    <div
+                        class="bg-slate-800 p-3 rounded-xl text-center text-white text-[9px] font-bold uppercase tracking-widest border-b-4 border-slate-950 shadow-lg">
+                        Warehouse <span class="text-brand-400">(Star Schema)</span></div>
+                    <div
+                        class="bg-accent-700 p-3 rounded-xl text-center text-white text-[9px] font-bold uppercase tracking-widest border-b-4 border-accent-950 shadow-lg">
+                        Bedrock (Llama 3.1)</div>
                 </div>
             </div>
         </section>
 
-        <!-- SECTION 4: Cloud & CI/CD Architecture -->
-        <section id="cloud-arch" class="py-12 scroll-mt-20">
-            <div class="mb-10 text-center max-w-3xl mx-auto">
-                <h2 class="text-3xl font-bold text-slate-900 mb-4 tracking-tight">4. Cloud & CI/CD Architecture</h2>
-            </div>
-
-            <div
-                class="bg-white border border-slate-200 rounded-3xl p-6 md:p-10 overflow-x-auto print-avoid-break shadow-sm">
-                <div class="min-w-[1050px] space-y-12">
-                    <div class="flex justify-around items-start">
-                        <div class="text-center w-1/3">
-                            <div class="bg-slate-100 p-4 rounded-2xl border border-slate-200 shadow-sm">
-                                <div class="text-2xl">👤</div>
-                                <div class="text-xs font-bold mt-2 text-slate-800">Browser Client</div>
-                            </div>
-                            <div class="connector-v h-10"></div>
-                        </div>
-                        <div class="text-center w-1/3">
-                            <div class="bg-slate-800 text-white p-4 rounded-2xl shadow-md border-b-4 border-slate-600">
-                                <div class="text-2xl">🐙</div>
-                                <div class="text-xs font-bold mt-2">GitHub (master)</div>
-                            </div>
-                            <div class="connector-v h-10"></div>
+        <!-- SECTION 4: Cloud Architecture -->
+        <section id="cloud" class="py-12 scroll-mt-20">
+            <h2 class="text-4xl font-bold text-slate-900 mb-6 tracking-tight text-center">4. Cloud & CI/CD Architecture
+            </h2>
+            <div id="cloud-content"
+                class="bg-white border border-slate-200 rounded-3xl p-10 print-avoid-break shadow-sm">
+                <div class="flex justify-around items-start mb-10">
+                    <div
+                        class="bg-slate-800 text-white p-4 rounded-xl shadow-xl border-b-4 border-slate-600 text-center w-56">
+                        <i class="fa-brands fa-github text-xl mb-1"></i>
+                        <div class="text-[10px] font-bold uppercase tracking-widest">GITHUB (Master)</div>
+                    </div>
+                    <div class="subgraph bg-slate-50/70 border-dashed w-1/2 shadow-inner text-center">
+                        <div class="subgraph-label">Multi-Arch Build Pipeline</div>
+                        <div class="text-[10px] font-bold py-2">docker buildx (linux/amd64 + linux/arm64) → DockerHub
                         </div>
                     </div>
-
-                    <div class="flex justify-between items-center gap-8">
-                        <div class="w-1/4"></div>
-                        <div class="w-1/2 subgraph">
-                            <div class="subgraph-label">CI: GitHub Actions</div>
-                            <div class="flex flex-col items-center gap-3">
+                </div>
+                <div class="flex gap-10">
+                    <div class="w-2/3 subgraph bg-white border-brand-100 shadow-md">
+                        <div class="subgraph-label !text-brand-600 font-bold uppercase tracking-tight">AWS MUMBAI
+                            (ap-south-1)</div>
+                        <div class="grid grid-cols-2 gap-10 mt-4">
+                            <div class="subgraph border-brand-500 bg-brand-50/10 p-5">
                                 <div
-                                    class="bg-accent-50 text-accent-700 border border-accent-200 px-4 py-2 rounded text-[10px] font-bold w-full text-center">
-                                    buildx: linux/amd64 + arm64</div>
-                                <div class="connector-v h-6"></div>
-                                <div
-                                    class="bg-brand-50 text-brand-700 border border-brand-200 px-4 py-2 rounded text-[10px] font-bold w-full text-center">
-                                    Push Multi-Arch manifest</div>
+                                    class="subgraph-label !bg-white !text-brand-700 font-bold uppercase tracking-tight">
+                                    EC2 t4g.small (ARM64)</div>
+                                <div class="space-y-1 text-[9px] font-bold">
+                                    <div
+                                        class="bg-white p-2 rounded flex justify-between border border-slate-50 shadow-sm">
+                                        <span>nginx (Reverse Proxy)</span><span>:80</span>
+                                    </div>
+                                    <div class="bg-slate-900 text-white p-2 rounded flex justify-between shadow-lg">
+                                        <span>Go Gin Binary</span><span>v1.2</span>
+                                    </div>
+                                    <div
+                                        class="bg-white p-2 rounded flex justify-between border border-slate-50 shadow-sm">
+                                        <span>React SPA Bundle</span><span>Static</span>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-                        <div class="w-1/4 text-center">
                             <div
-                                class="bg-slate-50 border-2 border-dashed border-slate-300 p-6 rounded-full inline-block">
-                                <div class="text-2xl">🐳</div>
-                                <div class="text-[10px] font-bold text-slate-500 mt-1">DockerHub</div>
+                                class="subgraph border-accent-200 bg-white flex flex-col items-center justify-center p-8 text-center h-full shadow-inner">
+                                <div class="subgraph-label !text-accent-600 font-bold uppercase tracking-tighter">RDS
+                                    db.t4g.micro</div>
+                                <i class="fa-solid fa-database text-4xl text-slate-100 mb-3"></i>
+                                <div class="text-center">
+                                    <div class="text-[10px] font-bold text-slate-800 uppercase tracking-tighter">
+                                        PostgreSQL 16</div>
+                                    <div class="text-[9px] text-accent-600 font-mono font-bold tracking-tight mt-1">+
+                                        pgvector Extension</div>
+                                </div>
                             </div>
                         </div>
                     </div>
-
-                    <div class="flex items-stretch gap-12">
-                        <div class="w-2/3 subgraph bg-slate-50/30">
-                            <div class="subgraph-label">AWS ap-south-1 (Mumbai)</div>
-                            <div class="grid grid-cols-2 gap-8 mt-4">
-                                <div class="space-y-6">
-                                    <div
-                                        class="bg-white p-3 rounded-lg border border-slate-200 flex items-center gap-3">
-                                        <div class="bg-brand-500 text-white p-2 rounded text-[10px] font-bold">EIP</div>
-                                        <div class="text-[9px] text-slate-600">13.126.208.105</div>
-                                    </div>
-                                    <div class="subgraph border-brand-200 bg-white shadow-sm">
-                                        <div class="subgraph-label !text-brand-600 !bg-white">EC2 t4g.small (ARM64)
-                                        </div>
-                                        <div class="space-y-2 py-2">
-                                            <div
-                                                class="bg-slate-100 p-2 rounded text-[9px] font-bold flex justify-between">
-                                                <span>nginx proxy</span><span>:80</span>
-                                            </div>
-                                            <div
-                                                class="bg-slate-800 text-white p-2 rounded text-[9px] font-bold flex justify-between">
-                                                <span>Go Backend</span><span>Gin API</span>
-                                            </div>
-                                            <div
-                                                class="bg-brand-50 p-2 rounded text-[9px] font-bold flex justify-between">
-                                                <span>React Static</span><span>SPA</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="space-y-6 h-full">
-                                    <div
-                                        class="subgraph border-accent-200 bg-white shadow-sm h-full flex flex-col items-center justify-center">
-                                        <div class="subgraph-label !text-accent-600 !bg-white">RDS PostgreSQL</div>
-                                        <div class="text-3xl mb-2">🐘</div>
-                                        <div class="text-[10px] font-bold text-slate-800 text-center">PostgreSQL
-                                            16<br><span class="text-accent-600">+ pgvector</span></div>
-                                    </div>
-                                </div>
+                    <div
+                        class="w-1/3 subgraph border-purple-200 bg-purple-50/20 flex flex-col items-center justify-center text-center p-8 shadow-md">
+                        <div class="subgraph-label !text-purple-600 font-bold uppercase">US-EAST-1 (Routing)</div>
+                        <i class="fa-solid fa-microchip text-5xl text-purple-100 mb-4"></i>
+                        <div class="bg-white p-5 rounded-2xl border border-purple-100 shadow-md w-full">
+                            <div class="text-[10px] font-black uppercase mb-1 text-slate-700 tracking-tight">Bedrock
+                                <span class="text-accent-600">Profiles</span>
                             </div>
-                        </div>
-                        <div
-                            class="w-1/3 subgraph border-purple-200 bg-purple-50/20 flex flex-col items-center justify-center">
-                            <div class="subgraph-label !text-purple-600 !bg-white">AWS us-east-1</div>
-                            <div class="text-3xl mb-4">☁️</div>
-                            <div class="bg-white p-4 rounded-xl border border-purple-100 shadow-sm w-full text-center">
-                                <div class="text-[10px] font-bold text-slate-800">Amazon Bedrock</div>
-                                <div class="text-[9px] text-purple-600 font-mono mt-1">Llama 3.1 70B</div>
-                            </div>
+                            <div class="text-[10px] text-purple-600 font-mono font-bold italic">Meta Llama 3.1 70B</div>
                         </div>
                     </div>
                 </div>
@@ -678,82 +640,80 @@
         </section>
 
         <!-- SECTION 5: AI Layer: UX Value -->
-        <section id="ux-value" class="py-12 scroll-mt-20">
-            <div class="mb-10 text-center max-w-3xl mx-auto">
-                <h2 class="text-3xl font-bold text-slate-900 mb-4 tracking-tight">5. AI Layer: User Experience Value
-                </h2>
-                <p class="text-slate-600 leading-relaxed">
-                    AI-CM transitions Category Managers from "Data Hunters" to "Decision Makers" through autonomous
-                    discovery and strategic execution.
-                </p>
-            </div>
+        <section id="ux" class="py-12 scroll-mt-20">
+            <h2 class="text-4xl font-bold text-slate-900 mb-10 tracking-tight text-center">5. AI Layer: UX Value</h2>
+            <div id="ux-print-container" class="space-y-10">
+                <!-- Row 1: 4 Pillar Cards -->
+                <div class="grid grid-cols-4 gap-6 px-4">
+                    <div
+                        class="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm print-avoid-break border-t-4 border-t-brand-500">
+                        <div class="text-3xl mb-4 text-brand-600 font-bold">⚡</div>
+                        <h3 class="font-bold text-slate-900 mb-2 text-sm">Frictionless Discovery</h3>
+                        <p class="text-[10px] text-slate-500 leading-relaxed font-medium">Natural language eliminates
+                            technical barriers. Users <span class="text-slate-800 font-bold">"Ask"</span> and get
+                            complex metrics immediately without knowing SQL or BI filters.</p>
+                    </div>
+                    <div
+                        class="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm print-avoid-break border-t-4 border-t-accent-500">
+                        <div class="text-3xl mb-4 text-accent-600 font-bold">🧠</div>
+                        <h3 class="font-bold text-slate-900 mb-2 text-sm">Causal Clarity</h3>
+                        <p class="text-[10px] text-slate-500 leading-relaxed font-medium">AI connects pricing shifts to
+                            stockouts instinctively, providing the <span class="text-slate-800 font-bold">"Why"</span>
+                            narrative behind trends for consistent strategic context.</p>
+                    </div>
+                    <div
+                        class="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm print-avoid-break border-t-4 border-t-brand-500">
+                        <div class="text-3xl mb-4 text-brand-600 font-bold">🕒</div>
+                        <h3 class="font-bold text-slate-900 mb-2 text-sm">Proactive Guardrails</h3>
+                        <p class="text-[10px] text-slate-500 leading-relaxed font-medium">The Watchdog agent monitors
+                            data 24/7, catching anomalies before they hit quarterly margins, moving users from reactive
+                            to proactive monitoring.</p>
+                    </div>
+                    <div
+                        class="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm print-avoid-break border-t-4 border-t-accent-500">
+                        <div class="text-3xl mb-4 text-accent-600 font-bold">🛠️</div>
+                        <h3 class="font-bold text-slate-900 mb-2 text-sm">Actionable Results</h3>
+                        <p class="text-[10px] text-slate-500 leading-relaxed font-medium">Planner converts fuzzy goals
+                            into ready-to-execute price changes or restock orders in one single click via the integrated
+                            Action Center.</p>
+                    </div>
+                </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 print-avoid-break">
+                <!-- Row 2: Human-in-the-loop -->
                 <div
-                    class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:border-accent-200 transition-all">
-                    <div class="text-2xl mb-4">⚡</div>
-                    <h3 class="font-bold text-slate-800 mb-2">Frictionless Discovery</h3>
-                    <p class="text-xs text-slate-600 leading-relaxed">Natural Language exploration eliminates manual
-                        filtering or technical dashboard expertise. Ask, and get the data immediately.</p>
-                </div>
-                <div
-                    class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:border-brand-200 transition-all">
-                    <div class="text-2xl mb-4">🧠</div>
-                    <h3 class="font-bold text-slate-800 mb-2">Causal Clarity</h3>
-                    <p class="text-xs text-slate-600 leading-relaxed">AI connects pricing and stock trends to explain
-                        "Why" anomalies occur, providing a consistent strategic narrative for the manager.</p>
-                </div>
-                <div
-                    class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:border-accent-200 transition-all">
-                    <div class="text-2xl mb-4">🕒</div>
-                    <h3 class="font-bold text-slate-800 mb-2">Proactive Guardrails</h3>
-                    <p class="text-xs text-slate-600 leading-relaxed">Watchdog monitors data 24/7. detection shifts from
-                        reactive checking to active alert notifications before margin impact.</p>
-                </div>
-                <div
-                    class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:border-brand-200 transition-all">
-                    <div class="text-2xl mb-4">🛠️</div>
-                    <h3 class="font-bold text-slate-800 mb-2">Actionable Proposals</h3>
-                    <p class="text-xs text-slate-600 leading-relaxed">Planner converts fuzzy goals into execution tasks
-                        like markdown orders or emails, needing only one click to approve.</p>
-                </div>
-            </div>
-
-            <div
-                class="mt-8 bg-slate-900 text-white rounded-3xl p-8 flex flex-col md:flex-row items-center gap-8 print-avoid-break">
-                <div class="md:w-1/2">
-                    <h3 class="text-2xl font-bold mb-4">The "Copilot" Experience</h3>
-                    <ul class="space-y-4 text-sm">
-                        <li class="flex items-start gap-3"><span
-                                class="text-brand-400">✓</span><strong>Human-in-the-Loop:</strong> Action Center
-                            provides a safety gate for AI strategies.</li>
-                        <li class="flex items-start gap-3"><span class="text-brand-400">✓</span><strong>Contextual
-                                Memory:</strong> Deep memory prevents suggesting failed strategies twice.</li>
-                        <li class="flex items-start gap-3"><span class="text-brand-400">✓</span><strong>Real-time
-                                Reasoning:</strong> Streaming shows the "thought process" for transparency.</li>
-                    </ul>
-                </div>
-                <div class="md:w-1/2 bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-inner">
-                    <div class="text-xs font-mono text-slate-500 mb-4 uppercase">Logic Sequence Visualization</div>
-                    <div class="space-y-3">
-                        <div
-                            class="flex justify-between items-center text-[10px] bg-slate-900 p-2 rounded border border-slate-700">
-                            <span>Natural Language Query</span><span class="text-brand-400">Input</span>
-                        </div>
-                        <div class="connector-v h-3"></div>
-                        <div
-                            class="flex justify-between items-center text-[10px] bg-slate-900 p-2 rounded border border-slate-700">
-                            <span>Intent Classification</span><span class="text-accent-400">Supervisor</span>
-                        </div>
-                        <div class="connector-v h-3"></div>
-                        <div
-                            class="flex justify-between items-center text-[10px] bg-slate-900 p-2 rounded border border-slate-700">
-                            <span>Self-Healing SQL</span><span class="text-brand-400">Analyst</span>
-                        </div>
-                        <div class="connector-v h-3"></div>
-                        <div
-                            class="flex justify-between items-center text-[10px] bg-slate-900 p-2 rounded border border-slate-700">
-                            <span>Strategic Proposal</span><span class="text-accent-400">Planner</span>
+                    class="bg-slate-900 text-white rounded-[2.5rem] p-10 flex items-center gap-16 mx-4 shadow-2xl border border-white/5 print-avoid-break">
+                    <div class="w-1/2">
+                        <h3 class="text-3xl font-bold mb-6 tracking-tight text-brand-400">Human-in-the-Loop Workflow
+                        </h3>
+                        <ul class="space-y-6 text-sm font-medium">
+                            <li class="flex items-start gap-4"><span
+                                    class="text-brand-500 font-black text-xl leading-none">✓</span><strong>Deep
+                                    Memory:</strong> AI remembers previous strategies and stakeholder preferences using
+                                pgvector to avoid redundancy and maintain continuity.</li>
+                            <li class="flex items-start gap-4"><span
+                                    class="text-brand-500 font-black text-xl leading-none">✓</span><strong>Process
+                                    Clarity:</strong> Real-time SSE streaming shows the agent's thought process as it
+                                happens, building trust through total procedural transparency.</li>
+                        </ul>
+                    </div>
+                    <div class="w-1/2 bg-slate-800 p-8 rounded-2xl border border-slate-700 shadow-inner">
+                        <div class="flex flex-col gap-3 font-mono text-[9px] uppercase tracking-wider">
+                            <div
+                                class="flex justify-between items-center bg-slate-900 p-3 rounded border border-slate-700">
+                                <span>Natural Query</span><span class="text-brand-400 font-bold">User Input</span>
+                            </div>
+                            <div
+                                class="flex justify-between items-center bg-slate-900 p-3 rounded border border-slate-700">
+                                <span>Intent Context</span><span class="text-accent-400 font-bold">Supervisor</span>
+                            </div>
+                            <div
+                                class="flex justify-between items-center bg-slate-900 p-3 rounded border border-slate-700">
+                                <span>Heuristic SQL</span><span class="text-brand-400 font-bold">Analyst</span>
+                            </div>
+                            <div
+                                class="flex justify-between items-center bg-slate-900 p-3 rounded border border-brand-500 font-bold">
+                                <span>Proposed Plan</span><span class="text-accent-400 font-bold">Planner</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -761,71 +721,45 @@
         </section>
 
         <!-- SECTION 6: AWS Stack -->
-        <section id="aws" class="py-12 scroll-mt-20 mb-12">
-            <div class="mb-10 text-center max-w-3xl mx-auto">
-                <h2 class="text-3xl font-bold text-slate-900 mb-4 tracking-tight">6. AWS Infrastructure Stack</h2>
-            </div>
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
-                    <div class="absolute top-0 right-0 p-4 text-slate-100 text-6xl font-bold group-hover:text-brand-50">
-                        01</div>
-                    <h3 class="font-bold text-lg mb-4 text-slate-800">EC2 t4g.small</h3>
-                    <p class="text-sm text-slate-600 leading-relaxed">ARM64 Graviton2 with **2GB RAM** for stable
-                        multi-container operation.</p>
+        <section id="aws" class="py-12 scroll-mt-20 mb-10">
+            <h2 class="text-4xl font-bold text-slate-900 mb-12 tracking-tight text-center">6. AWS Infrastructure Stack
+            </h2>
+            <div class="grid grid-cols-3 gap-10">
+                <div
+                    class="bg-slate-900 text-white p-10 rounded-3xl relative overflow-hidden group print-avoid-break border border-white/5 shadow-2xl h-full flex flex-col justify-center">
+                    <h3 class="font-black text-brand-400 mb-2 uppercase tracking-[0.3em] text-[10px]">Compute</h3>
+                    <h4 class="text-2xl font-bold text-white mb-4">EC2 t4g.small</h4>
+                    <p class="text-xs text-slate-400 leading-relaxed font-medium">Graviton2 ARM64 provides <span
+                            class="font-bold text-slate-200">2GB RAM</span>—optimized for high-density Docker monolith
+                        stability while qualifying for the promotional free trial.</p>
                 </div>
-                <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
-                    <div class="absolute top-0 right-0 p-4 text-slate-100 text-6xl font-bold group-hover:text-brand-50">
-                        02</div>
-                    <h3 class="font-bold text-lg mb-4 text-slate-800">RDS PostgreSQL</h3>
-                    <p class="text-sm text-slate-600 leading-relaxed">Managed **db.t4g.micro** with **pgvector** for
-                        relational and semantic search.</p>
+                <div
+                    class="bg-slate-900 text-white p-10 rounded-3xl relative overflow-hidden group print-avoid-break border border-white/5 shadow-2xl h-full flex flex-col justify-center">
+                    <h3 class="font-black text-accent-400 mb-2 uppercase tracking-[0.3em] text-[10px]">Database</h3>
+                    <h4 class="text-2xl font-bold text-white mb-4">RDS PostgreSQL</h4>
+                    <p class="text-xs text-slate-400 leading-relaxed font-medium">Managed instance with <span
+                            class="font-mono text-xs text-accent-300">pgvector</span>. Handles relational sales facts
+                        and semantic memory search simultaneously in a single managed tier.</p>
                 </div>
-                <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
-                    <div class="absolute top-0 right-0 p-4 text-slate-100 text-6xl font-bold group-hover:text-brand-50">
-                        03</div>
-                    <h3 class="font-bold text-lg mb-4 text-slate-800">Amazon Bedrock</h3>
-                    <p class="text-sm text-slate-600 leading-relaxed">Serverless **Llama 3.1 70B** at **14x lower cost**
-                        than proprietary APIs.</p>
+                <div
+                    class="bg-slate-900 text-white p-10 rounded-3xl relative overflow-hidden group print-avoid-break border border-white/5 shadow-2xl h-full flex flex-col justify-center">
+                    <h3 class="font-black text-brand-400 mb-2 uppercase tracking-[0.3em] text-[10px]">Inference</h3>
+                    <h4 class="text-2xl font-bold text-white mb-4">Bedrock</h4>
+                    <p class="text-xs text-slate-400 leading-relaxed font-medium">Serverless <span
+                            class="font-bold text-slate-200">Llama 3.1 70B</span> in us-east-1, delivering high-tier
+                        reasoning at <span class="text-brand-400 font-bold">14x lower cost</span> than proprietary API
+                        alternatives.</p>
                 </div>
             </div>
         </section>
 
     </main>
 
-    <footer class="bg-slate-900 text-slate-400 py-12 text-center border-t border-slate-800 no-print">
-        <div class="max-w-7xl mx-auto px-4">
-            <p class="text-sm mb-4 tracking-wide">AI-CM Project Submission - Built with AWS Graviton2 & Bedrock Llama
-                3.1 70B</p>
-        </div>
+    <footer class="bg-white text-slate-400 py-20 text-center border-t border-slate-100 no-print">
+        <p class="text-xs font-black uppercase tracking-[0.4em] mb-4 text-slate-900 tracking-widest">AI-CM Master Report
+            — 2026</p>
     </footer>
 
-    <!-- JS -->
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const ctxTime = document.getElementById('timeAllocationChart').getContext('2d');
-            new Chart(ctxTime, {
-                type: 'doughnut',
-                data: {
-                    labels: ['Strategic Decision Making', 'Manual Retrieval (Old)'],
-                    datasets: [{
-                        data: [70, 30],
-                        backgroundColor: ['#22c55e', '#94a3b8'],
-                        borderWidth: 0
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    animation: { duration: 0 },
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: { callbacks: { label: (c) => ` ${c.label}: ${c.parsed}%` } }
-                    },
-                    cutout: '70%'
-                }
-            });
-        });
-    </script>
 </body>
 
 </html>
