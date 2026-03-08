@@ -6,144 +6,425 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI-CM Documentation</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <!-- Mermaid.js for diagrams -->
-    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f8fafc;
+        :root { --sidebar-width: 268px; }
+
+        body { font-family: 'Inter', sans-serif; background: #f8fafc; }
+
+        /* ── Layout ── */
+        .sidebar {
+            position: fixed; top: 0; left: 0; bottom: 0;
+            width: var(--sidebar-width);
+            background: #0f172a;
+            overflow-y: auto; overflow-x: hidden;
+            z-index: 40;
+            transition: transform 0.25s ease;
         }
+        .sidebar::-webkit-scrollbar { width: 4px; }
+        .sidebar::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+
+        .main-content {
+            margin-left: var(--sidebar-width);
+            min-height: 100vh;
+        }
+
+        @media (max-width: 768px) {
+            .sidebar { transform: translateX(-100%); }
+            .sidebar.open { transform: translateX(0); }
+            .main-content { margin-left: 0; }
+            .sidebar-overlay { display: block; }
+        }
+
+        /* ── Sidebar nav items ── */
+        .nav-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 9px 16px; border-radius: 8px; margin: 2px 8px;
+            font-size: 13px; font-weight: 500; color: #94a3b8;
+            cursor: pointer; transition: all 0.15s ease;
+            text-decoration: none;
+        }
+        .nav-item:hover { background: #1e293b; color: #e2e8f0; }
+        .nav-item.active { background: #15803d; color: #f0fdf4; font-weight: 600; }
+        .nav-item .icon { width: 16px; text-align: center; flex-shrink: 0; font-size: 12px; }
+
+        /* ── Prose (markdown content) ── */
+        .prose { color: #1e293b; line-height: 1.8; max-width: 860px; }
 
         .prose h1 {
-            font-size: 2.25rem;
-            font-weight: 800;
-            margin-bottom: 1.5rem;
-            color: #0f172a;
-            border-bottom: 2px solid #e2e8f0;
-            padding-bottom: 0.5rem;
+            font-size: 2rem; font-weight: 800; color: #0f172a;
+            border-bottom: 2px solid #e2e8f0; padding-bottom: 0.6rem;
+            margin: 0 0 1.5rem;
         }
-
         .prose h2 {
-            font-size: 1.5rem;
-            font-weight: 700;
-            margin-top: 2rem;
-            margin-bottom: 1rem;
-            color: #1e293b;
+            font-size: 1.4rem; font-weight: 700; color: #1e293b;
+            margin: 2.5rem 0 1rem; border-bottom: 1px solid #f1f5f9;
+            padding-bottom: 0.4rem;
+        }
+        .prose h3 {
+            font-size: 1.1rem; font-weight: 700; color: #334155;
+            margin: 2rem 0 0.75rem;
+        }
+        .prose h4 {
+            font-size: 0.95rem; font-weight: 700; color: #475569;
+            margin: 1.5rem 0 0.5rem; text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .prose h5, .prose h6 {
+            font-size: 0.9rem; font-weight: 600; color: #64748b;
+            margin: 1rem 0 0.4rem;
         }
 
-        .prose p {
-            margin-bottom: 1.25rem;
-            line-height: 1.75;
-            color: #475569;
-        }
+        .prose p { margin-bottom: 1.25rem; color: #334155; }
+
+        .prose a { color: #15803d; text-decoration: none; font-weight: 500; }
+        .prose a:hover { text-decoration: underline; color: #166534; }
+
+        /* Badge images (shields.io etc.) — display inline */
+        .prose img { display: inline; vertical-align: middle; margin: 0 2px; max-width: 100%; }
+        /* Block images */
+        .prose p > img:only-child { display: block; margin: 1.5rem auto; max-width: 100%; border-radius: 8px; }
 
         .prose code {
-            background: #f1f5f9;
-            padding: 0.2rem 0.4rem;
-            border-radius: 0.25rem;
-            font-family: monospace;
-            font-size: 0.875em;
-            color: #e11d48;
+            background: #f1f5f9; color: #e11d48;
+            padding: 0.15rem 0.4rem; border-radius: 4px;
+            font-family: 'JetBrains Mono', monospace; font-size: 0.85em;
         }
-
         .prose pre {
-            background: #0f172a;
-            color: #f8fafc;
-            padding: 1.25rem;
-            border-radius: 0.75rem;
-            overflow-x: auto;
-            margin: 1.5rem 0;
+            background: #0f172a; color: #e2e8f0;
+            padding: 1.25rem 1.5rem; border-radius: 10px;
+            overflow-x: auto; margin: 1.5rem 0;
+            border: 1px solid #1e293b;
         }
-
-        /* Style for mermaid diagrams to ensure they look good in the prose container */
-        .mermaid {
-            background: white;
-            padding: 1rem;
-            border-radius: 0.75rem;
-            margin: 1.5rem 0;
-            display: flex;
-            justify-content: center;
-        }
-
-        .prose a {
-            color: #22c55e;
-            text-decoration: none;
-            font-weight: 500;
-        }
-
-        .prose a:hover {
-            text-decoration: underline;
+        .prose pre code {
+            background: none; color: inherit; padding: 0;
+            font-size: 0.875rem; line-height: 1.7;
         }
 
         .prose ul {
-            list-style-type: disc;
-            padding-left: 1.5rem;
-            margin-bottom: 1.25rem;
-            color: #475569;
+            list-style-type: disc; padding-left: 1.75rem;
+            margin-bottom: 1.25rem; color: #334155;
+        }
+        .prose ol {
+            list-style-type: decimal; padding-left: 1.75rem;
+            margin-bottom: 1.25rem; color: #334155;
+        }
+        .prose li { margin-bottom: 0.35rem; }
+        .prose li > ul, .prose li > ol { margin-top: 0.35rem; margin-bottom: 0.35rem; }
+
+        .prose blockquote {
+            border-left: 4px solid #22c55e; background: #f0fdf4;
+            padding: 0.75rem 1.25rem; border-radius: 0 8px 8px 0;
+            margin: 1.5rem 0; color: #166534;
+        }
+        .prose blockquote p { color: #166534; margin: 0; }
+        .prose blockquote strong { color: #14532d; }
+
+        .prose hr {
+            border: none; border-top: 2px solid #e2e8f0;
+            margin: 2.5rem 0;
+        }
+
+        /* Tables */
+        .prose table {
+            width: 100%; border-collapse: collapse;
+            margin: 1.5rem 0; font-size: 0.9rem;
+            border: 1px solid #e2e8f0; border-radius: 8px;
+            overflow: hidden;
+        }
+        .prose thead { background: #f8fafc; }
+        .prose th {
+            padding: 10px 14px; text-align: left;
+            font-weight: 700; color: #475569; font-size: 0.8rem;
+            text-transform: uppercase; letter-spacing: 0.04em;
+            border-bottom: 2px solid #e2e8f0;
+        }
+        .prose td {
+            padding: 10px 14px; color: #334155;
+            border-bottom: 1px solid #f1f5f9; vertical-align: top;
+        }
+        .prose tr:last-child td { border-bottom: none; }
+        .prose tr:hover td { background: #f8fafc; }
+
+        /* Mermaid diagrams */
+        .mermaid-wrap {
+            background: white; border: 1px solid #e2e8f0;
+            border-radius: 10px; padding: 1.5rem;
+            margin: 1.5rem 0; overflow-x: auto;
+            display: flex; justify-content: center;
+        }
+
+        /* Loading / error states */
+        .loading-state {
+            display: flex; align-items: center; justify-content: center;
+            padding: 5rem 2rem; color: #94a3b8; gap: 12px;
+        }
+        .error-state {
+            background: #fef2f2; border: 1px solid #fecaca;
+            border-radius: 10px; padding: 1.5rem; color: #dc2626;
+            margin: 2rem 0;
         }
     </style>
 </head>
 
-<body class="antialiased text-slate-900">
-    <nav class="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200 px-6 py-4">
-        <div class="max-w-4xl mx-auto flex justify-between items-center">
-            <a href="../" class="text-xl font-bold text-brand-700 tracking-tight">AI-CM <span
-                    class="text-slate-400 font-light">Docs</span></a>
-            <a href="../" class="text-sm font-medium text-slate-600 hover:text-green-600"><i
-                    class="fas fa-arrow-left mr-2"></i>Back to Report</a>
-        </div>
-    </nav>
+<body class="antialiased">
 
-    <main class="max-w-4xl mx-auto px-6 py-12">
-        <div id="content" class="prose bg-white border border-slate-200 rounded-3xl p-8 md:p-12 shadow-sm">
-            <div class="flex items-center justify-center py-20 text-slate-400">
-                <i class="fas fa-spinner fa-spin text-2xl mr-3"></i> Loading Documentation...
-            </div>
+    <!-- Sidebar overlay for mobile -->
+    <div id="sidebar-overlay" class="sidebar-overlay fixed inset-0 bg-black/50 z-30 hidden" onclick="toggleSidebar()"></div>
+
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+        <div class="p-5 border-b border-slate-800">
+            <a href="../" class="flex items-center gap-2 group">
+                <span class="text-lg font-black text-green-400 tracking-tight">AI-CM</span>
+                <span class="text-sm font-light text-slate-400 group-hover:text-slate-300">Docs</span>
+            </a>
         </div>
-    </main>
+
+        <nav class="py-4" id="sidebar-nav">
+            <!-- Populated by JS -->
+        </nav>
+
+        <div class="p-4 border-t border-slate-800 mt-auto">
+            <a href="../" class="nav-item" style="margin: 0;">
+                <span class="icon"><i class="fas fa-arrow-left"></i></span>
+                Back to Report
+            </a>
+        </div>
+    </aside>
+
+    <!-- Main -->
+    <div class="main-content flex flex-col min-h-screen">
+
+        <!-- Top bar -->
+        <header class="sticky top-0 z-20 bg-white/90 backdrop-blur border-b border-slate-200 px-6 py-3 flex items-center gap-4">
+            <button class="md:hidden text-slate-600 hover:text-slate-900" onclick="toggleSidebar()">
+                <i class="fas fa-bars text-lg"></i>
+            </button>
+            <div class="flex items-center gap-2 text-sm text-slate-500 min-w-0">
+                <a href="../" class="hover:text-green-600 shrink-0">AI-CM</a>
+                <span class="shrink-0">/</span>
+                <span id="breadcrumb" class="font-medium text-slate-800 truncate">Documentation</span>
+            </div>
+            <div class="ml-auto flex items-center gap-3 text-slate-400 text-sm">
+                <a href="https://github.com/debmalyaroy/ai-cm" target="_blank" rel="noopener"
+                   class="hover:text-slate-700 transition-colors">
+                    <i class="fab fa-github text-lg"></i>
+                </a>
+            </div>
+        </header>
+
+        <!-- Content -->
+        <main class="flex-1 px-6 py-10 md:px-12">
+            <article id="content" class="prose mx-auto">
+                <div class="loading-state">
+                    <i class="fas fa-spinner fa-spin text-2xl text-green-500"></i>
+                    <span>Loading documentation…</span>
+                </div>
+            </article>
+        </main>
+
+        <footer class="border-t border-slate-200 py-6 px-12 text-center text-xs text-slate-400">
+            AI-CM Documentation — 2026
+        </footer>
+    </div>
 
     <script>
-        // Initialize Mermaid
-        mermaid.initialize({ startOnLoad: false, theme: 'neutral' });
+        // ── Navigation manifest ────────────────────────────────────────────
+        const DOCS = [
+            { label: 'README / Overview',       file: null,                          icon: 'fa-house' },
+            { label: 'Requirements',            file: '../requirements.md',           icon: 'fa-file-lines' },
+            { label: 'Phased Implementation',   file: 'phased_implementation.md',    icon: 'fa-list-check' },
+            { label: 'Agentic Architecture',    file: 'design_agent.md',             icon: 'fa-brain' },
+            { label: 'Low Level Design',        file: 'low_level_design.md',         icon: 'fa-diagram-project' },
+            { label: 'AWS Deployment',          file: 'aws_deployment_guide.md',     icon: 'fa-cloud' },
+            { label: 'How to Run Locally',      file: 'HOW_TO_RUN_LOCALLY.md',      icon: 'fa-laptop-code' },
+            { label: 'GitHub CI',               file: 'GITHUB_CI.md',               icon: 'fa-gears' },
+            { label: 'Prompt Testing',          file: 'PROMPT_TESTING.md',          icon: 'fa-flask' },
+        ];
 
-        async function loadDocs() {
+        // ── URL helpers ────────────────────────────────────────────────────
+        // The viewer lives at docs/index.html, so:
+        //   viewerDir  = https://.../ai-cm/docs/
+        //   rootDir    = https://.../ai-cm/
+        const viewerDir = new URL('./', window.location.href).href;
+        const rootDir   = new URL('../', viewerDir).href;
+
+        function getFileParam() {
+            return new URLSearchParams(window.location.search).get('file');
+        }
+
+        function fileParamToFetchUrl(fileParam) {
+            if (!fileParam) return '../README.md';
+            return fileParam; // relative to docs/ — e.g. 'design_agent.md' or '../requirements.md'
+        }
+
+        // Convert an absolute URL back to a ?file= param string (or null if external)
+        function absoluteToFileParam(absUrl) {
+            const href = absUrl.href;
+            if (href.startsWith(viewerDir)) {
+                // Within docs/ — e.g. docs/design_agent.md → 'design_agent.md'
+                return href.slice(viewerDir.length);
+            }
+            if (href.startsWith(rootDir)) {
+                // Root level — e.g. /requirements.md → '../requirements.md'
+                return '../' + href.slice(rootDir.length);
+            }
+            return null; // external
+        }
+
+        // ── Sidebar ────────────────────────────────────────────────────────
+        function buildSidebar() {
+            const nav   = document.getElementById('sidebar-nav');
+            const current = getFileParam();
+            nav.innerHTML = DOCS.map(doc => {
+                const isActive = (doc.file === null && current === null)
+                              || (doc.file !== null && current === doc.file);
+                return `<a class="nav-item ${isActive ? 'active' : ''}"
+                           href="?file=${doc.file ? encodeURIComponent(doc.file) : ''}"
+                           data-file="${doc.file ?? ''}"
+                           onclick="handleNavClick(event, ${JSON.stringify(doc.file)})">
+                            <span class="icon"><i class="fas ${doc.icon}"></i></span>
+                            ${doc.label}
+                        </a>`;
+            }).join('');
+        }
+
+        function updateSidebarActive(fileParam) {
+            document.querySelectorAll('.nav-item[data-file]').forEach(el => {
+                const elFile = el.getAttribute('data-file') || null;
+                const match  = (fileParam === null && elFile === null) || (elFile === fileParam);
+                el.classList.toggle('active', match);
+            });
+        }
+
+        function toggleSidebar() {
+            const sb = document.getElementById('sidebar');
+            const ov = document.getElementById('sidebar-overlay');
+            sb.classList.toggle('open');
+            ov.classList.toggle('hidden', !sb.classList.contains('open'));
+        }
+
+        // ── Marked setup ──────────────────────────────────────────────────
+        // Use default marked rendering — mermaid blocks handled in post-process step
+        marked.use({ gfm: true, breaks: false });
+
+        // ── Mermaid setup ─────────────────────────────────────────────────
+        mermaid.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'loose' });
+
+        // ── Load & render a doc ───────────────────────────────────────────
+        async function loadDoc(fileParam, pushState = false) {
             const container = document.getElementById('content');
+            container.innerHTML = `<div class="loading-state">
+                <i class="fas fa-spinner fa-spin text-2xl text-green-500"></i>
+                <span>Loading…</span></div>`;
+
+            const fetchUrl = fileParamToFetchUrl(fileParam);
+
+            if (pushState) {
+                const url = fileParam ? `?file=${encodeURIComponent(fileParam)}` : '?';
+                history.pushState({ file: fileParam }, '', url);
+            }
+
+            updateSidebarActive(fileParam);
+
             try {
-                // Fetch README from root (one level up)
-                const response = await fetch('../README.md');
-                if (!response.ok) throw new Error('README.md not found');
-                let markdown = await response.text();
+                const res = await fetch(fetchUrl);
+                if (!res.ok) throw new Error(`Could not load ${fetchUrl} (${res.status})`);
+                const markdown = await res.text();
 
-                // FIX RELATIVE LINKS: 
-                markdown = markdown.replace(/\]\(docs\//g, '](./');
-
-                // Configure Marked to handle Mermaid code blocks
-                const renderer = new marked.Renderer();
-                const originalCodeRenderer = renderer.code.bind(renderer);
-
-                renderer.code = function (code, language, escaped) {
-                    if (language === 'mermaid') {
-                        return `<div class="mermaid">${code}</div>`;
-                    }
-                    return originalCodeRenderer(code, language, escaped);
-                };
-
-                marked.setOptions({ renderer: renderer });
-
-                // Render Markdown
+                // Render markdown → HTML
                 container.innerHTML = marked.parse(markdown);
 
-                // Initialize Mermaid diagrams after the HTML is added to the DOM
-                await mermaid.run();
+                // ── Post-process 1: convert mermaid code blocks ──────────
+                container.querySelectorAll('pre code').forEach(code => {
+                    const lang = [...code.classList]
+                        .find(c => c.startsWith('language-'))
+                        ?.replace('language-', '');
+                    if (lang === 'mermaid') {
+                        const wrap = document.createElement('div');
+                        wrap.className = 'mermaid-wrap';
+                        const inner = document.createElement('div');
+                        inner.className = 'mermaid';
+                        inner.textContent = code.textContent;
+                        wrap.appendChild(inner);
+                        code.parentElement.replaceWith(wrap);
+                    }
+                });
 
-            } catch (error) {
-                container.innerHTML = `<div class="text-red-500">Error: ${error.message}</div>`;
+                // ── Post-process 2: rewrite .md links ────────────────────
+                // Resolve relative links against the fetched file's URL,
+                // then convert back to ?file= params so they open in the viewer.
+                const fetchBase = new URL(fetchUrl, viewerDir);
+                container.querySelectorAll('a[href]').forEach(a => {
+                    const href = a.getAttribute('href');
+                    if (!href) return;
+                    // Skip anchors, mailto, and external URLs
+                    if (href.startsWith('#') || href.startsWith('mailto:') ||
+                        href.startsWith('http://') || href.startsWith('https://')) return;
+
+                    if (href.endsWith('.md') || href.includes('.md#') || href.includes('.md?')) {
+                        try {
+                            const resolved  = new URL(href, fetchBase);
+                            const fileParam = absoluteToFileParam(resolved);
+                            if (fileParam) {
+                                a.setAttribute('href', `?file=${encodeURIComponent(fileParam)}`);
+                                a.setAttribute('data-md-file', fileParam);
+                            }
+                        } catch (_) { /* leave as-is */ }
+                    }
+                });
+
+                // ── Post-process 3: render mermaid diagrams ───────────────
+                const diagrams = container.querySelectorAll('.mermaid');
+                if (diagrams.length) {
+                    await mermaid.run({ nodes: diagrams });
+                }
+
+                // ── Update page title & breadcrumb ───────────────────────
+                const h1 = container.querySelector('h1');
+                const title = h1?.textContent?.trim() || DOCS.find(d => d.file === fileParam)?.label || 'Documentation';
+                document.title = `${title} — AI-CM Docs`;
+                document.getElementById('breadcrumb').textContent = title;
+
+                // Scroll to top
+                window.scrollTo({ top: 0, behavior: 'instant' });
+
+            } catch (err) {
+                container.innerHTML = `<div class="error-state">
+                    <strong><i class="fas fa-triangle-exclamation mr-2"></i>Error loading document</strong>
+                    <p class="mt-2 text-sm">${err.message}</p></div>`;
             }
         }
-        window.onload = loadDocs;
+
+        // ── Click handler for sidebar & in-page .md links ─────────────────
+        function handleNavClick(e, fileParam) {
+            e.preventDefault();
+            loadDoc(fileParam || null, true);
+        }
+
+        // Intercept clicks on rewritten in-page links
+        document.getElementById('content').addEventListener('click', e => {
+            const a = e.target.closest('a[data-md-file]');
+            if (!a) return;
+            e.preventDefault();
+            const fileParam = a.getAttribute('data-md-file');
+            loadDoc(fileParam, true);
+        });
+
+        // ── Browser back / forward ────────────────────────────────────────
+        window.addEventListener('popstate', e => {
+            const fileParam = e.state?.file ?? null;
+            loadDoc(fileParam, false);
+            updateSidebarActive(fileParam);
+        });
+
+        // ── Init ──────────────────────────────────────────────────────────
+        buildSidebar();
+        loadDoc(getFileParam(), false);
     </script>
 </body>
 

@@ -1,6 +1,8 @@
 # GitHub CI/CD Pipeline
 
-This document covers the two GitHub Actions workflows: **CI** (build, test, push images) and **Deploy** (EC2 deployment).
+This document covers the two GitHub Actions workflows: **PR Review** (quality gate on PRs) and **CI** (build, test, push images on merge to master).
+
+> **Deployment is intentionally not automated from CI.** To deploy, run `scripts/deploy.sh` (or `scripts/deploy.ps1`) locally after CI passes.
 
 ---
 
@@ -21,17 +23,13 @@ Push to master
   ┌─────────────────────────────────────┐
   │  CI workflow  (ci.yml)             │
  │  1. Build & test Go backend         │
- │  2. Build Next.js frontend          │
+ │  2. Build Vite frontend             │
  │  3. Push Docker images to DockerHub │
- └──────────────┬──────────────────────┘
-                │ (on success)
-                ▼
- ┌─────────────────────────────────────┐
- │  Deploy workflow  (deploy.yml)      │
- │  1. SSH into EC2                    │
- │  2. Pull images from DockerHub      │
- │  3. Restart containers              │
  └─────────────────────────────────────┘
+                 │
+                 ▼
+         Deploy manually
+         (scripts/deploy.sh)
 ```
 
 ---
@@ -66,45 +64,21 @@ Push to master
 
 ### Jobs
 
-#### `build-backend`
-- Sets up Go 1.22
-- Downloads modules (`go mod download`)
+#### `test`
+- Sets up Go 1.22 and Node 20
+- **Runs backend unit tests**: `go test -v -coverprofile=coverage.out -skip 'E2E|e2e|EndToEnd' ./...`
+- Installs frontend dependencies and runs frontend tests (`npm test`)
+
+#### `build-and-push`
+- Runs only after `test` succeeds
+- Sets up Go 1.22 and Node 20
 - Generates Swagger docs (`swag init`)
 - Runs `golangci-lint`
-- **Runs tests excluding e2e**: `go test -skip 'E2E|e2e|EndToEnd' ./...`
-- Builds the binary (`go build ./cmd/server`)
-
-#### `build-frontend`
-- Sets up Node 20
-- Installs dependencies (`npm ci`)
-- Builds Next.js (`npm run build`)
-
-#### `push-images`
-- Runs only after **both** `build-backend` and `build-frontend` succeed
-- Skipped on pull requests (images are only pushed from `master`)
-- Builds backend and frontend Docker images
+- Logs into DockerHub
+- Builds backend and frontend Docker images via `./scripts/build.sh all -t prod`
 - Pushes to DockerHub as:
   - `<username>/aicm-backend:latest` + `:<git-sha>`
   - `<username>/aicm-frontend:latest` + `:<git-sha>`
-- Uses GitHub Actions layer cache for faster builds
-
----
-
-## Workflow 3 — Deploy (`deploy.yml`)
-
-### Triggers
-| Event | When |
-|---|---|
-| `workflow_run` (CI completes) | Auto-deploys to EC2 when CI succeeds on master |
-| `workflow_dispatch` | Manual trigger — use when you want to re-deploy without a code push (e.g., after updating `.env.prod` on EC2 manually) |
-
-### What it does
-1. Copies updated config files to EC2 (`docker-compose.prod.yml`, `config.prod.yaml`, `nginx.conf`, prompts)
-2. Updates `DOCKER_REGISTRY` in `.env.prod` on EC2
-3. Pulls the latest pre-built images from DockerHub (`docker compose pull`)
-4. Restarts all containers (`docker compose up -d --remove-orphans`)
-
-> No Docker build happens on EC2 — images are always pulled from DockerHub. This avoids OOM on the 1GB t3.micro instance.
 
 ---
 
@@ -116,10 +90,8 @@ Go to **GitHub → your repo → Settings → Secrets and variables → Actions 
 |---|---|---|
 | `DOCKER_USERNAME` | Your DockerHub username | e.g., `debmalyaroy` |
 | `DOCKER_PAT` | DockerHub **Personal Access Token** | See below — do NOT use your login password |
-| `NEXT_PUBLIC_API_URL` | Public URL of your app | e.g., `http://your-elastic-ip` or `https://yourdomain.com` |
-| `AWS_EC2_HOST` | EC2 Elastic IP or hostname | e.g., `54.123.45.67` |
-| `AWS_EC2_USER` | SSH username | `ec2-user` (Amazon Linux) or `ubuntu` (Ubuntu) |
-| `AWS_SSH_PRIVATE_KEY` | Contents of your `.pem` key file | Paste the full PEM including `-----BEGIN RSA PRIVATE KEY-----` |
+
+> No AWS credentials or API URL secrets are needed in GitHub. The frontend uses relative URLs (`/api/...`) so `VITE_API_URL` is not needed at build time — nginx on EC2 handles routing. Deployment is done locally via `scripts/deploy.sh`.
 
 ### How to create a DockerHub Access Token
 
@@ -132,35 +104,24 @@ Using an access token (instead of your password) is **more secure** — it can b
 5. Copy the token — it is shown **only once**
 6. Paste it as the `DOCKER_PAT` GitHub secret (note: the secret name is `DOCKER_PAT`, not `DOCKER_PASSWORD`)
 
-### How to get your SSH private key for `AWS_SSH_PRIVATE_KEY`
-
-```bash
-# Print the contents of your .pem key — copy the entire output including header/footer
-cat ~/.ssh/aicm-key.pem
-```
-
-Paste the entire output (including `-----BEGIN RSA PRIVATE KEY-----` and `-----END RSA PRIVATE KEY-----`) into the GitHub secret.
-
 ---
 
-| Concern | PR Review | CI (Master) | Deploy (EC2) |
-|---|---|---|---|
-| Runs on PRs? | Yes | No | No |
-| Enforces 80% Coverage? | Yes (Backend) | No (Builds only) | No |
-| Builds Docker images? | No | Yes | No (pulls images) |
-| Touches EC2? | No | No | Yes |
-| Can run manually? | No | Yes | Yes |
+| Concern | PR Review | CI (Master) |
+|---|---|---|
+| Runs on PRs? | Yes | No |
+| Enforces 80% Coverage? | Yes (Backend) | No (Builds only) |
+| Builds Docker images? | No | Yes |
+| Pushes to DockerHub? | No | Yes |
+| Touches EC2? | No | No |
+| Can run manually? | No | Yes |
 
 Separating them means:
 - PRs act as strict gatekeepers (linting, tests, coverage) without accidentally triggering image pushes.
 - Merges to `master` generate artifacts efficiently without repeating heavy coverage processing.
-- You can re-deploy to EC2 independently without pushing code.
 
 ---
 
 ## Docker Login — How It Works End-to-End
-
-The CI pipeline logs into DockerHub in two places:
 
 ### 1. GitHub Actions (CI workflow — `.github/workflows/ci.yml`)
 The workflow uses the official `docker/login-action` before building images:
@@ -171,38 +132,17 @@ The workflow uses the official `docker/login-action` before building images:
     username: ${{ secrets.DOCKER_USERNAME }}
     password: ${{ secrets.DOCKER_PAT }}
 ```
-This is the primary login in CI. The `build.sh all -t prod` script then pushes the images.
 
 ### 2. Local build with `-Target prod`
 When you run `.\scripts\build.ps1 all -Target prod` locally, the script reads `DOCKER_PAT`
 (or `DOCKER_PASSWORD` as fallback) from the root `.env` `[prod.aws]` section and calls
 `docker login` automatically before pushing.
 
-### Configuring `DOCKER_PAT` in GitHub Secrets
-
-1. Create a DockerHub PAT (see **"How to create a DockerHub Access Token"** section above).
-2. Go to your repo → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**.
-3. Add each secret from the table below:
-
-| Secret Name | Value |
-|---|---|
-| `DOCKER_USERNAME` | Your DockerHub username (e.g., `debmalyaroy`) |
-| `DOCKER_PAT` | The PAT generated from DockerHub (starts with `dckr_pat_`) |
-| `NEXT_PUBLIC_API_URL` | Public URL of your deployed app (e.g., `http://your-elastic-ip`) |
-| `AWS_EC2_HOST` | EC2 Elastic IP or hostname |
-| `AWS_EC2_USER` | `ec2-user` (Amazon Linux) or `ubuntu` (Ubuntu) |
-| `AWS_SSH_PRIVATE_KEY` | Full contents of your `.pem` key file |
-
-> **Security note**: Always use a PAT — never your DockerHub account password. PATs can be
-> scoped to Read & Write only and revoked independently without changing your password.
-
----
-
 ---
 
 ## AWS IAM Policies
 
-Three IAM identities are needed to deploy AI-CM to AWS.
+Two IAM identities are needed to operate AI-CM on AWS.
 
 ### 1. EC2 Instance Role (for Bedrock access at runtime)
 
@@ -237,13 +177,7 @@ The EC2 instance that runs the containers needs this **IAM Role** attached so th
 
 Create in IAM → Roles → Create role → AWS service → EC2, then attach this policy and assign the role to your EC2 instance.
 
-### 2. CI/CD GitHub Actions User (for DockerHub push only)
-
-The GitHub Actions CI workflow only needs DockerHub credentials — **no AWS permissions**. These are stored as GitHub secrets (`DOCKER_USERNAME`, `DOCKER_PAT`).
-
-The deploy workflow SSHs into EC2 and runs `docker compose pull` + `up`. No AWS API calls are made by the workflow itself.
-
-### 3. EC2 Start/Stop User (optional, for the `aws_startstop` script)
+### 2. EC2 Start/Stop User (optional, for the `aws_startstop` script)
 
 If you use `scripts/aws_startstop.sh` or `.ps1` locally to start/stop the instance to save costs, that user needs:
 
@@ -276,9 +210,13 @@ Store `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` for this user in the `[pro
 2. Click **Run workflow** (top right)
 3. Select branch `master` → **Run workflow**
 
-### Trigger Deploy manually
-1. Go to **GitHub → Actions → Deploy AI-CM to AWS**
-2. Click **Run workflow** → **Run workflow**
+### Deploy to EC2
+Run locally after CI has pushed images to DockerHub:
+```bash
+./scripts/deploy.sh prod
+# or on Windows:
+.\scripts\deploy.ps1 prod
+```
 
 ---
 
@@ -290,9 +228,7 @@ Store `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` for this user in the `[pro
 | `DOCKER_PAT` auth failure | Wrong secret or expired token | Regenerate DockerHub Access Token, update the `DOCKER_PAT` GitHub secret |
 | `swag: command not found` | PATH issue | swag is installed with `go install` — check Go bin in PATH |
 | `golangci-lint` version mismatch | Old action version | The workflow pins `v1.56.2` — update if lint config changes |
-| Frontend build OOM in CI | Large Next.js app | GitHub Actions runners have 7GB RAM — should not be an issue |
-| `AWS_SSH_PRIVATE_KEY` permission denied | Key format wrong | Ensure the full PEM block is in the secret (no extra whitespace) |
-| Deploy job skipped | CI failed | Check CI logs — deploy only runs when CI succeeds |
+| Frontend build OOM in CI | Large Vite app | GitHub Actions runners have 7GB RAM — should not be an issue |
 
 ---
 
@@ -315,5 +251,5 @@ npm ci && npm run build
 
 # Build Docker images locally
 docker build -f infra/Dockerfile.backend -t aicm-backend:local ./src/backend
-docker build -f infra/Dockerfile.frontend --build-arg NEXT_PUBLIC_API_URL=http://localhost -t aicm-frontend:local ./src/apps/web
+docker build -f infra/Dockerfile.frontend -t aicm-frontend:local ./src/apps/web
 ```

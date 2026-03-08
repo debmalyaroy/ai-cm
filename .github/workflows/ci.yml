@@ -84,7 +84,6 @@ jobs:
         env:
           DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
           DOCKER_PAT: ${{ secrets.DOCKER_PAT }}
-          VITE_API_URL: ${{ secrets.VITE_API_URL || 'http://localhost' }}
         run: |
           chmod +x ./scripts/build.sh
           # Run the build script targeting production, which builds and pushes both images
