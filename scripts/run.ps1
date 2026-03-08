@@ -82,8 +82,10 @@ try {
 
     Write-Host ""
     Write-Host "✅ System started successfully!" -ForegroundColor Green
-    Write-Host "   Frontend: http://localhost:3000"
-    Write-Host "   Backend:  http://localhost:8080"
+    Write-Host "   App (nginx):  http://localhost:8181"
+    Write-Host "   Frontend:     http://localhost:3000  (direct)"
+    Write-Host "   Backend:      http://localhost:8080  (direct)"
+    Write-Host "   Summary page: http://localhost:8181/project-summary.html"
 }
 catch {
     Write-Host "Startup failed: $_" -ForegroundColor Red
