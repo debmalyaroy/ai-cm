@@ -215,9 +215,9 @@ func generateActions(db *pgxpool.Pool, recommender *agent.Recommender) gin.Handl
 			}
 			result, err := db.Exec(c, `
 				INSERT INTO action_log (id, title, description, action_type, category, confidence_score, status, priority, expected_impact)
-				SELECT $1, $2, $3, $4, $5, $6, 'pending', $7, $8
+				SELECT $1::uuid, $2::text, $3::text, $4::text, $5::text, $6::numeric, 'pending', $7::text, $8::text
 				WHERE NOT EXISTS (
-					SELECT 1 FROM action_log WHERE title = $2 AND status = 'pending'
+					SELECT 1 FROM action_log WHERE title = $2::text AND status = 'pending'
 				)
 			`, uuid.New().String(), s.Title, s.Description, s.ActionType, "General", s.Confidence, priority, s.ExpectedImpact)
 			if err != nil {

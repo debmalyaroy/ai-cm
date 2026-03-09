@@ -213,8 +213,7 @@ func TestE2E_NativeGraphQLMutations(t *testing.T) {
 	t.Logf("GraphQL mapped query successfully to %s: Response preview - %s...", sm.AgentName, sm.Content[:30])
 
 	// Quickly verify that episodic DB history hit exists
-	histReq, _ := http.NewRequest("POST", "/api/chat/sessions/"+sm.SessionId+"/messages", strings.NewReader(`{}`))
-	histReq.Header.Set("Content-Type", "application/json")
+	histReq, _ := http.NewRequest("GET", "/api/chat/sessions/"+sm.SessionId+"/messages", nil)
 	wH := httptest.NewRecorder()
 	router.ServeHTTP(wH, histReq)
 
